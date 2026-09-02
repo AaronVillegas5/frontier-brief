@@ -295,7 +295,7 @@ def fetch_reddit_sentiment(subreddits: list[str]) -> list[dict]:
     Uses .rss endpoints which still work without authentication, unlike the
     .json endpoints that now return 403 for unauthenticated requests.
 
-    A 3-second delay between subreddits is enforced to stay within Reddit's
+    A 6-second delay between subreddits is enforced to stay within Reddit's
     undocumented rate limits for unauthenticated RSS access.
     """
     all_posts = []
