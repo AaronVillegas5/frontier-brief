@@ -58,7 +58,14 @@ OUTPUT RULES:
 - Keep "frontier_watch" to 2-4 quick-hit items.
 - Keep "the_street_says" focused on genuine community sentiment, not just headlines.
 - Pick exactly ONE repo for "repo_of_the_day" — the most interesting/consequential one.
-- "two_steps_ahead" should be 2-3 paragraphs of genuine forward-looking analysis."""
+- "two_steps_ahead" should be 2-3 paragraphs of genuine forward-looking analysis.
+- In "the_big_story.sources", provide ONLY real https:// URLs from the raw data. Do NOT put source names like "GitHub Trending" or "Google DeepMind" — only actual article URLs. If you do not have a real URL for a source, omit it.
+- In "the_street_says.hot_takes", each take must include a "sentiment_color" field: a hex color (e.g. "#d4edda") chosen from this palette to reflect the emotional tone:
+  - Positive/optimistic: "#d4edda" (light green)
+  - Cautiously optimistic: "#cce5ff" (light blue)
+  - Skeptical/mixed: "#fff3cd" (light amber)
+  - Frustrated/bearish: "#f8d7da" (light red)
+  - Neutral: "#f8f9fa" (light grey)"""
 
 NEWSLETTER_SCHEMA = {
     "type": "object",
@@ -101,8 +108,9 @@ NEWSLETTER_SCHEMA = {
                             "source": {"type": "string"},
                             "take": {"type": "string"},
                             "sentiment": {"type": "string"},
+                            "sentiment_color": {"type": "string"},
                         },
-                        "required": ["source", "take", "sentiment"],
+                        "required": ["source", "take", "sentiment", "sentiment_color"],
                     },
                 },
             },
