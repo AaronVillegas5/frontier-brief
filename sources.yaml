@@ -1,0 +1,69 @@
+# The Frontier Brief — Data Sources Configuration
+# Edit this file to add, remove, or update data sources.
+
+# RSS/Atom feeds from major AI labs and notable startups
+lab_feeds:
+  # --- Frontier Labs ---
+  OpenAI:
+    url: "https://openai.com/news/rss.xml"
+  Anthropic:
+    # No official RSS; community-maintained via RSSHub
+    url: "https://rsshub.app/anthropic/news"
+  Google DeepMind:
+    url: "https://deepmind.google/blog/feed/basic/"
+  Meta AI Research:
+    url: "https://research.facebook.com/feed/"
+  Meta Engineering:
+    url: "https://engineering.fb.com/feed/"
+
+  # --- Notable Startups ---
+  Mistral AI:
+    url: "https://mistral.ai/news/index.xml"
+  Hugging Face:
+    url: "https://huggingface.co/blog/feed.xml"
+  Stability AI:
+    url: "https://stability.ai/news/feed"
+  Cohere:
+    url: "https://cohere.com/blog/rss.xml"
+  xAI:
+    # No official RSS; community-maintained via RSSHub
+    url: "https://rsshub.app/x/user/xaboratory"
+  Together AI:
+    url: "https://www.together.ai/blog/rss.xml"
+
+# Subreddits to monitor for community sentiment
+subreddits:
+  - "MachineLearning"
+  - "LocalLLaMA"
+  - "singularity"
+
+# Keywords for X/Twitter search via RSS bridges
+x_search_terms:
+  - "AI"
+  - "LLM"
+  - "GPT"
+  - "machine learning"
+  - "frontier model"
+
+# GitHub trending configuration
+github_trending:
+  url: "https://github.com/trending"
+  since: "daily"
+  # Keywords to filter for AI-relevant repos (case-insensitive)
+  ai_keywords:
+    - "ai"
+    - "llm"
+    - "machine learning"
+    - "deep learning"
+    - "neural"
+    - "transformer"
+    - "diffusion"
+    - "gpt"
+    - "language model"
+    - "embedding"
+    - "rag"
+    - "agent"
+    - "fine-tune"
+    - "inference"
+    - "vision"
+    - "multimodal"
