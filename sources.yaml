@@ -7,8 +7,8 @@ lab_feeds:
   OpenAI:
     url: "https://openai.com/news/rss.xml"
   Anthropic:
-    # No official RSS; community-maintained via RSSHub
-    url: "https://rsshub.app/anthropic/news"
+    # No official RSS; community-maintained GitHub Pages feed
+    url: "https://conoro.github.io/anthropic-engineering-rss-feed/anthropic_engineering_rss.xml"
   Google DeepMind:
     url: "https://deepmind.google/blog/feed/basic/"
   Meta AI Research:
@@ -18,16 +18,15 @@ lab_feeds:
 
   # --- Notable Startups ---
   Mistral AI:
-    url: "https://mistral.ai/news/index.xml"
+    # No RSS exists; scraped directly from their news page
+    scrape_url: "https://mistral.ai/news/"
   Hugging Face:
     url: "https://huggingface.co/blog/feed.xml"
   Stability AI:
-    url: "https://stability.ai/news/feed"
+    # No official RSS; community-maintained GitHub raw feed
+    url: "https://raw.githubusercontent.com/leontloveless/ai-rss-feeds/main/feeds/stability-ai.xml"
   Cohere:
     url: "https://cohere.com/blog/rss.xml"
-  xAI:
-    # No official RSS; community-maintained via RSSHub
-    url: "https://rsshub.app/x/user/xaboratory"
   Together AI:
     url: "https://www.together.ai/blog/rss.xml"
 
