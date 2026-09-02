@@ -1,0 +1,7 @@
+google-genai
+feedparser
+beautifulsoup4
+requests
+resend
+python-dotenv
+pyyaml
