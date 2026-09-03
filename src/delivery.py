@@ -23,7 +23,7 @@ SECTION_DIVIDER = (
 
 # Section label font size (the ■ THE BIG STORY line)
 SECTION_LABEL_STYLE = (
-    "margin: 0 0 10px 0; font-size: 13px; font-weight: 800; "
+    "margin: 0 0 10px 0; font-size: 16px; font-weight: 800; "
     "text-transform: uppercase; letter-spacing: 1.5px;"
 )
 
@@ -323,7 +323,7 @@ def render_html(newsletter: dict) -> str:
           <!-- Two Steps Ahead -->
           <tr>
             <td style="padding: 20px 30px;">
-              <p style="{SECTION_LABEL_STYLE} color: #1a1a2e;">
+              <p style="{SECTION_LABEL_STYLE} color: #000080;">
                 &#9632; Two Steps Ahead
               </p>
               <p style="margin: 0; color: #333; font-size: 15px; line-height: 1.6;">
