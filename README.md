@@ -2,7 +2,9 @@
 
 A fully automated daily AI newsletter that pulls the latest from major AI labs and startups, captures community sentiment from Reddit and X/Twitter, highlights trending GitHub repos, and explains why it all matters — written for non-technical readers.
 
-Runs on GitHub Actions. Costs nothing. Ships by email every day at noon UTC.
+👉 **[Read the Live Web Archive here](https://AaronVillegas5.github.io/frontier-brief/)** 👈
+
+Runs on GitHub Actions. Costs nothing. Ships by email every day at 09:00 UTC.
 
 ---
 
