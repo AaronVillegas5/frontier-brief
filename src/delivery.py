@@ -347,7 +347,7 @@ def send_email(html: str, date_str: str) -> None:
     and deliver to the registered account email.
     """
     api_key = os.environ.get("RESEND_API_KEY")
-    from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev")
+    from_email = os.environ.get("FROM_EMAIL") or "onboarding@resend.dev"
     to_email = os.environ.get("TO_EMAIL")
 
     if not api_key:
