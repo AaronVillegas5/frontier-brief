@@ -47,3 +47,13 @@ hot_takes_count: 3           # number of community hot takes (2-4)
 # Options: "non-technical business owner" (default), "developer", "investor"
 # ---------------------------------------------------------------------------
 audience: "non-technical business owner"
+
+# ---------------------------------------------------------------------------
+# Analytics — Open Rate Tracking Pixel (Optional)
+# To track open rates for free, host a 1x1 transparent PNG on a free static 
+# server (like AWS S3 or Cloudflare R2) and put the full URL here.
+# The pipeline will inject an invisible <img> tag at the bottom of the email.
+# Example: "https://my-bucket.s3.amazonaws.com/1x1.png"
+# Leave empty ("") to disable open rate tracking.
+# ---------------------------------------------------------------------------
+tracking_pixel_url: ""
