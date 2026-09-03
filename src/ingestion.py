@@ -348,44 +348,221 @@ def fetch_reddit_sentiment(subreddits: list[str]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# X / Twitter Sentiment
+# Social Sentiment (Bluesky · Mastodon · HN · X/Twitter fallback)
 # ---------------------------------------------------------------------------
+
+BLUESKY_SEARCH_URL = "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+MASTODON_INSTANCES = [
+    "https://fosstodon.org",       # tech/developer community
+    "https://mastodon.social",     # general; large AI presence
+]
+HN_ALGOLIA_URL = "https://hn.algolia.com/api/v1/search_by_date"
+
 
 def fetch_x_sentiment(search_terms: list[str]) -> list[dict]:
     """
-    Attempt to fetch X/Twitter posts via public RSS bridges.
+    Fetch developer/AI community social posts from multiple free sources.
 
-    Strategy:
-    1. Try RSSHub public instance (rsshub.app/x/search/{term})
-    2. If RSSHub fails, try RSS.app with token if RSS_APP_TOKEN is set
-    3. If both fail, return empty list — pipeline degrades gracefully
+    Priority:
+    1. Bluesky public search API (unauthenticated, 3k req/5min)
+    2. Mastodon hashtag timelines (fosstodon.org, mastodon.social — no auth)
+    3. Hacker News Algolia search API (unauthenticated, 10k req/hr)
+    4. X/Twitter via RSSHub → RSS.app (best-effort, often blocked)
 
-    Nitter instances are offline as of Aug 2026.
+    All four are attempted; results are deduplicated by URL and combined.
+    Function is named fetch_x_sentiment for API compatibility with main.py.
     """
-    all_posts = []
-    seen_urls = set()
-    rss_app_token = os.environ.get("RSS_APP_TOKEN", "")
+    all_posts: list[dict] = []
+    seen_urls: set[str] = set()
 
-    for term in search_terms:
-        posts = _try_rsshub_x_search(term)
-        if not posts and rss_app_token:
-            posts = _try_rss_app_x_search(term, rss_app_token)
-
-        for post in posts:
-            url = post.get("url", "")
+    def _add(posts: list[dict]) -> None:
+        for p in posts:
+            url = p.get("url", "")
             if url and url not in seen_urls:
                 seen_urls.add(url)
-                all_posts.append(post)
+                all_posts.append(p)
+
+    # 1. Bluesky
+    bsky_posts = _fetch_bluesky(search_terms)
+    _add(bsky_posts)
+
+    # 2. Mastodon
+    mastodon_posts = _fetch_mastodon(search_terms)
+    _add(mastodon_posts)
+
+    # 3. Hacker News
+    hn_posts = _fetch_hacker_news(search_terms)
+    _add(hn_posts)
+
+    # 4. X/Twitter via bridges (best-effort)
+    rss_app_token = os.environ.get("RSS_APP_TOKEN", "")
+    for term in search_terms:
+        x_posts = _try_rsshub_x_search(term)
+        if not x_posts and rss_app_token:
+            x_posts = _try_rss_app_x_search(term, rss_app_token)
+        _add(x_posts)
 
     if all_posts:
-        logger.info("X/Twitter ingestion complete: %d posts", len(all_posts))
+        logger.info("Social sentiment ingestion complete: %d posts", len(all_posts))
     else:
         logger.warning(
-            "X/Twitter ingestion returned no results. "
-            "All bridge endpoints may be down. The newsletter will proceed without X data."
+            "Social sentiment ingestion returned no results from any source. "
+            "Newsletter will proceed without social data."
         )
 
     return all_posts
+
+
+def _fetch_bluesky(search_terms: list[str]) -> list[dict]:
+    """
+    Fetch AI-relevant posts from Bluesky using the public AppView search API.
+    No authentication required. Returns up to 5 posts per search term.
+    The public.api.bsky.app endpoint requires Accept: application/json
+    and rejects generic bot User-Agent strings.
+    """
+    bsky_headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; FrontierBrief/1.0; +https://github.com/frontier-brief)",
+    }
+    posts = []
+    for term in search_terms[:3]:  # limit terms to avoid rate limit spikes
+        try:
+            response = requests.get(
+                BLUESKY_SEARCH_URL,
+                params={"q": term, "limit": 10, "lang": "en"},
+                headers=bsky_headers,
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+            for post_obj in data.get("posts", [])[:5]:
+                record = post_obj.get("record", {})
+                author = post_obj.get("author", {})
+                handle = author.get("handle", "unknown")
+                uri = post_obj.get("uri", "")
+                # Convert at:// URI to web URL
+                url = ""
+                if uri.startswith("at://"):
+                    parts = uri.split("/")
+                    if len(parts) >= 5:
+                        url = f"https://bsky.app/profile/{handle}/post/{parts[-1]}"
+                text = record.get("text", "")
+                if not text or len(text) < 20:
+                    continue
+                posts.append({
+                    "text": text[:MAX_SUMMARY_CHARS],
+                    "author": f"@{handle}",
+                    "url": url or f"https://bsky.app/profile/{handle}",
+                    "published": record.get("createdAt", "unknown"),
+                    "search_term": term,
+                    "source": "bluesky",
+                    "engagement": (
+                        post_obj.get("likeCount", 0) +
+                        post_obj.get("repostCount", 0)
+                    ),
+                })
+            logger.debug("Bluesky: fetched posts for term '%s'", term)
+        except Exception as exc:
+            logger.debug("Bluesky search failed for '%s': %s", term, exc)
+    return posts
+
+
+def _fetch_mastodon(search_terms: list[str]) -> list[dict]:
+    """
+    Fetch posts from Mastodon hashtag public timelines.
+    Uses fosstodon.org (developer-focused) and mastodon.social.
+    No authentication required for public hashtag timelines.
+    """
+    # Map search terms to hashtags by stripping spaces
+    tags = list({t.replace(" ", "").lower() for t in search_terms if t})[:3]
+    posts = []
+
+    for instance in MASTODON_INSTANCES:
+        for tag in tags[:2]:  # 2 tags per instance to stay well under rate limits
+            try:
+                url = f"{instance}/api/v1/timelines/tag/{requests.utils.quote(tag)}"
+                response = requests.get(
+                    url,
+                    params={"limit": 10},
+                    headers=REQUEST_HEADERS,
+                    timeout=10,
+                )
+                response.raise_for_status()
+                statuses = response.json()
+                for status in statuses[:5]:
+                    content_html = status.get("content", "")
+                    content_text = _strip_html(content_html)
+                    if not content_text or len(content_text) < 20:
+                        continue
+                    account = status.get("account", {})
+                    posts.append({
+                        "text": content_text[:MAX_SUMMARY_CHARS],
+                        "author": f"@{account.get('acct', 'unknown')}",
+                        "url": status.get("url", ""),
+                        "published": status.get("created_at", "unknown"),
+                        "search_term": tag,
+                        "source": f"mastodon/{instance.split('//')[-1]}",
+                        "engagement": (
+                            status.get("favourites_count", 0) +
+                            status.get("reblogs_count", 0)
+                        ),
+                    })
+                logger.debug("Mastodon: fetched %s#%s", instance, tag)
+            except Exception as exc:
+                logger.debug("Mastodon fetch failed (%s #%s): %s", instance, tag, exc)
+
+    return posts
+
+
+def _fetch_hacker_news(search_terms: list[str]) -> list[dict]:
+    """
+    Fetch recent AI-related stories from Hacker News via Algolia search API.
+    No authentication required. Rate limit: 10,000 req/hr.
+    Returns top stories from the last 24 hours for each search term.
+    """
+    cutoff_ts = int((datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).timestamp())
+    posts = []
+    seen_ids: set[str] = set()
+
+    for term in search_terms[:3]:
+        try:
+            response = requests.get(
+                HN_ALGOLIA_URL,
+                params={
+                    "query": term,
+                    "tags": "story",
+                    "hitsPerPage": 10,
+                    "numericFilters": f"created_at_i>{cutoff_ts}",
+                },
+                headers=REQUEST_HEADERS,
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+            for hit in data.get("hits", [])[:5]:
+                hn_id = hit.get("objectID", "")
+                if not hn_id or hn_id in seen_ids:
+                    continue
+                seen_ids.add(hn_id)
+                title = hit.get("title", "")
+                if not title:
+                    continue
+                posts.append({
+                    "text": title,
+                    "author": hit.get("author", "unknown"),
+                    "url": f"https://news.ycombinator.com/item?id={hn_id}",
+                    "published": hit.get("created_at", "unknown"),
+                    "search_term": term,
+                    "source": "hacker_news",
+                    "engagement": hit.get("points", 0),
+                })
+            logger.debug("HN Algolia: fetched stories for term '%s'", term)
+        except Exception as exc:
+            logger.debug("HN Algolia search failed for '%s': %s", term, exc)
+
+    if posts:
+        logger.info("Hacker News: %d stories fetched", len(posts))
+    return posts
 
 
 def _try_rsshub_x_search(term: str) -> list[dict]:
@@ -407,7 +584,7 @@ def _try_rsshub_x_search(term: str) -> list[dict]:
                     if _parse_entry_date(entry) else "unknown"
                 ),
                 "search_term": term,
-                "source": "rsshub",
+                "source": "x_rsshub",
             })
         return posts
     except Exception as exc:
@@ -435,7 +612,7 @@ def _try_rss_app_x_search(term: str, token: str) -> list[dict]:
                     if _parse_entry_date(entry) else "unknown"
                 ),
                 "search_term": term,
-                "source": "rss_app",
+                "source": "x_rss_app",
             })
         return posts
     except Exception as exc:
