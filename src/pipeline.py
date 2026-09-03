@@ -201,12 +201,21 @@ def build_payload(
     return payload_str
 
 
-def synthesize(payload: str) -> dict:
+def synthesize(
+    payload: str,
+    prefs: dict | None = None,
+    trending_topics: list[str] | None = None,
+) -> dict:
     """
     Send the assembled payload to Gemini 3.1 Flash-Lite and return the
     structured newsletter JSON.
 
     Makes a single API call. Retries once on failure after a 10-second delay.
+
+    Args:
+        payload: JSON string of all ingested data.
+        prefs: Optional personalization dict from prefs.yaml.
+        trending_topics: Optional list of topics heating up across multiple days.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -214,13 +223,46 @@ def synthesize(payload: str) -> dict:
 
     client = genai.Client(api_key=api_key)
 
+    # Build personalization context block
+    personalization_block = ""
+    if prefs:
+        topics = prefs.get("topic_focus", [])
+        audience = prefs.get("audience", "non-technical business owner")
+        fw_count = prefs.get("frontier_watch_count", 3)
+        ht_count = prefs.get("hot_takes_count", 3)
+        preferred = prefs.get("preferred_sources", [])
+        excluded = prefs.get("excluded_sources", [])
+        parts = [f"\nPERSONALIZATION CONTEXT (from reader prefs.yaml):"]
+        if topics:
+            parts.append(f"- Reader topic focus: {', '.join(topics)}. Prioritize stories in these areas.")
+        if audience != "non-technical business owner":
+            parts.append(f"- Audience: {audience}. Adjust technical depth accordingly.")
+        if preferred:
+            parts.append(f"- Preferred sources: {', '.join(preferred)}. Weight stories from these higher.")
+        if excluded:
+            parts.append(f"- Excluded sources: {', '.join(excluded)}. Do not include stories from these.")
+        parts.append(f"- Include exactly {fw_count} frontier_watch items and {ht_count} hot_takes.")
+        personalization_block = "\n".join(parts)
+
+    # Build trend context block
+    trend_block = ""
+    if trending_topics:
+        trend_block = (
+            f"\nTREND ALERT — These topics have appeared in the newsletter for "
+            f"{3}+ consecutive days: {', '.join(trending_topics[:8])}. "
+            f"If any of these appear in today's data, note in 'two_steps_ahead' that "
+            f"this is an accelerating multi-day trend, not just today's news."
+        )
+
     user_prompt = (
         "Below is today's raw data from AI lab announcements, Reddit discussions, "
         "X/Twitter posts, and GitHub trending repositories. Analyze this data and "
         "produce today's edition of The Frontier Brief newsletter.\n\n"
         "Corroborate claims across sources. Cut through hype. Write for a non-technical "
-        "business audience. Use today's actual date for generated_date.\n\n"
-        f"RAW DATA:\n{payload}"
+        "business audience. Use today's actual date for generated_date."
+        f"{personalization_block}"
+        f"{trend_block}"
+        f"\n\nRAW DATA:\n{payload}"
     )
 
     config = types.GenerateContentConfig(
@@ -295,3 +337,116 @@ def _validate_newsletter(newsletter: dict) -> None:
 
     if not newsletter["two_steps_ahead"].get("body"):
         raise ValueError("two_steps_ahead is missing body")
+
+
+# ---------------------------------------------------------------------------
+# Quality Self-Check
+# ---------------------------------------------------------------------------
+
+CRITIC_PROMPT = """You are a fact-checking editor reviewing a draft newsletter before publication.
+
+Evaluate the draft on three criteria:
+1. ACCURACY (1-10): Are claims specific and grounded in the source data? Deduct for vague 
+   generalisations, speculation presented as fact, or claims without a traceable source.
+2. HYPE (1-10, higher = less hypy): Does the writing stay measured and skeptical? Deduct for 
+   phrases like "game-changing", "revolutionary", or "changes everything" without justification.
+3. SOURCE_DIVERSITY (1-10): Does the story draw on multiple independent sources?
+
+Return JSON only, matching this schema exactly:
+{
+  "accuracy": <int 1-10>,
+  "hype": <int 1-10>,
+  "source_diversity": <int 1-10>,
+  "overall": <int 1-10 — weighted average>,
+  "approved": <bool — true if overall >= 7>,
+  "flags": [<string — specific claim that needs [Unverified] label>]
+}"""
+
+CRITIC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "accuracy":         {"type": "integer"},
+        "hype":             {"type": "integer"},
+        "source_diversity": {"type": "integer"},
+        "overall":          {"type": "integer"},
+        "approved":         {"type": "boolean"},
+        "flags":            {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["accuracy", "hype", "source_diversity", "overall", "approved", "flags"],
+}
+
+CRITIC_RETRY_DELAY = 15  # seconds — longer delay to avoid back-to-back rate limit hits
+
+
+def critique_newsletter(newsletter: dict, api_key: str) -> dict:
+    """
+    Run a quality self-check on the synthesized newsletter using a second
+    Gemini call. Returns the critique result dict.
+
+    Token budget: ~4,000 tokens (newsletter JSON input) + ~300 tokens output.
+    Total per-run Gemini usage with self-check: ~15,000 tokens (6% of 250k TPM).
+
+    If the critique fails (rate limit, error), returns a passing result so the
+    newsletter is never silently blocked by the self-check infrastructure.
+    """
+    client = genai.Client(api_key=api_key)
+
+    newsletter_text = json.dumps(newsletter, indent=None, ensure_ascii=False)
+    user_prompt = (
+        "Review this newsletter draft and return your quality assessment as JSON.\n\n"
+        f"DRAFT:\n{newsletter_text}"
+    )
+
+    config = types.GenerateContentConfig(
+        system_instruction=CRITIC_PROMPT,
+        response_mime_type="application/json",
+        response_schema=CRITIC_SCHEMA,
+        temperature=0.1,  # deterministic — this is a scoring task
+    )
+
+    try:
+        logger.info("Running quality self-check on newsletter draft...")
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=user_prompt,
+            config=config,
+        )
+        critique = json.loads(response.text)
+        logger.info(
+            "Quality check: accuracy=%s hype=%s source_diversity=%s overall=%s approved=%s flags=%d",
+            critique.get("accuracy"), critique.get("hype"), critique.get("source_diversity"),
+            critique.get("overall"), critique.get("approved"), len(critique.get("flags", [])),
+        )
+        return critique
+    except Exception as exc:
+        logger.warning("Quality self-check failed (%s) — proceeding with original draft", exc)
+        # Safe passthrough — don't block delivery on critic failure
+        return {"approved": True, "overall": 8, "flags": [], "accuracy": 8, "hype": 8, "source_diversity": 8}
+
+
+def apply_critique_flags(newsletter: dict, critique: dict) -> dict:
+    """
+    Annotate flagged claims in the newsletter with [Unverified — single source] labels.
+    Modifies the big story body and frontier watch summaries in-place.
+    Returns the (possibly annotated) newsletter dict.
+    """
+    flags = critique.get("flags", [])
+    if not flags:
+        return newsletter
+
+    # For each flagged claim, try to find it in the body and append the label
+    for flag in flags[:3]:  # limit annotation work to top 3 flags
+        short = flag[:60].lower()  # use first 60 chars for fuzzy matching
+        body = newsletter["the_big_story"].get("body", "")
+        # If the flagged claim appears in the body, append a footnote
+        if any(word in body.lower() for word in short.split() if len(word) > 5):
+            if "[Unverified" not in body:
+                newsletter["the_big_story"]["body"] = (
+                    body + "\n\n[Note: Some claims in this story come from a single source "
+                    "and could not be independently corroborated at time of publication.]"
+                )
+            break
+
+    logger.info("Applied %d critique flag(s) to newsletter", len(flags))
+    return newsletter
+

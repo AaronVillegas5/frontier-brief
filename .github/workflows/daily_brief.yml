@@ -2,16 +2,19 @@ name: The Frontier Brief — Daily Newsletter
 
 on:
   schedule:
-    # Run daily at 12:00 PM UTC
+    # Run daily at 12:00 PM UTC (7 AM EST / 6 AM CST)
     - cron: "0 12 * * *"
   workflow_dispatch:
     # Manual trigger for testing
+
+permissions:
+  contents: write  # needed to commit topic_history.json and push to gh-pages
 
 jobs:
   generate-and-deliver:
     name: Generate & Deliver Newsletter
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -32,3 +35,39 @@ jobs:
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
         run: python main.py
+
+      - name: Commit trend history
+        # Commits data/topic_history.json back to master so the next run
+        # can read the rolling topic window for trend detection.
+        run: |
+          git config user.name "frontier-brief[bot]"
+          git config user.email "frontier-brief[bot]@users.noreply.github.com"
+          git add data/topic_history.json || true
+          git diff --staged --quiet || git commit -m "chore(data): update topic history [skip ci]"
+          git push origin HEAD:master || true
+
+      - name: Publish archive to GitHub Pages
+        # Copies the archive/ directory to the gh-pages branch so each
+        # edition is permanently accessible at USERNAME.github.io/frontier-brief/
+        run: |
+          git config user.name "frontier-brief[bot]"
+          git config user.email "frontier-brief[bot]@users.noreply.github.com"
+
+          # Stash the freshly-generated archive/ directory
+          cp -r archive /tmp/frontier-archive
+
+          # Switch to gh-pages (create orphan branch on first run)
+          git fetch origin gh-pages 2>/dev/null && git checkout gh-pages \
+            || git checkout --orphan gh-pages && git rm -rf . --quiet
+
+          # Copy archive files in
+          cp -r /tmp/frontier-archive/* . 2>/dev/null || true
+
+          # Commit and push
+          git add -A
+          git diff --staged --quiet \
+            || git commit -m "archive: publish edition $(date -u '+%Y-%m-%d') [skip ci]"
+          git push origin gh-pages || true
+
+          # Return to master
+          git checkout master
