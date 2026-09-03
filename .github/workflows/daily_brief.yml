@@ -2,8 +2,8 @@ name: The Frontier Brief — Daily Newsletter
 
 on:
   schedule:
-    # Run daily at 12:00 PM UTC (7 AM EST / 6 AM CST)
-    - cron: "0 12 * * *"
+    # Run daily at 09:00 AM UTC (4 AM EST / 3 AM CST)
+    - cron: "0 9 * * *"
   workflow_dispatch:
     # Manual trigger for testing
 
