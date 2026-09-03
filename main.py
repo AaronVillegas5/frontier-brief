@@ -1,9 +1,11 @@
 """
 The Frontier Brief — Main Entrypoint
 
-Orchestrates the full pipeline: load config → ingest data → synthesize
-newsletter via Gemini → render HTML → deliver email. Handles errors at
-each stage with retry logic and graceful degradation.
+Orchestrates the full pipeline:
+  load config + prefs → ingest data → trend detection → synthesize newsletter
+  via Gemini → quality self-check → render HTML → save archive → deliver email
+
+Handles errors at each stage with retry logic and graceful degradation.
 """
 
 import logging
@@ -21,8 +23,14 @@ from src.ingestion import (
     fetch_reddit_sentiment,
     fetch_x_sentiment,
 )
-from src.pipeline import build_payload, synthesize
+from src.pipeline import (
+    build_payload,
+    synthesize,
+    critique_newsletter,
+    apply_critique_flags,
+)
 from src.delivery import render_html, send_email
+from src.trends import load_history, update_history, save_history, detect_heating_topics
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -51,6 +59,83 @@ def load_sources() -> dict:
     return sources
 
 
+def load_prefs() -> dict:
+    """
+    Load personalization preferences from prefs.yaml.
+    Returns defaults if the file doesn't exist (backwards compatible).
+    """
+    prefs_path = Path(__file__).parent / "prefs.yaml"
+    if not prefs_path.exists():
+        return {}
+    try:
+        with open(prefs_path, "r", encoding="utf-8") as f:
+            prefs = yaml.safe_load(f) or {}
+        logger.info(
+            "Loaded prefs.yaml: audience=%s, topic_focus=%d topics",
+            prefs.get("audience", "non-technical business owner"),
+            len(prefs.get("topic_focus", [])),
+        )
+        return prefs
+    except Exception as exc:
+        logger.warning("Could not load prefs.yaml (%s) — using defaults", exc)
+        return {}
+
+
+def save_archive(html: str, date_str: str) -> Path | None:
+    """
+    Save the rendered newsletter HTML to archive/YYYY-MM-DD.html and update
+    archive/index.html with a link to the latest edition.
+
+    The archive/ directory is committed to the gh-pages branch by the
+    GitHub Actions workflow after each run.
+    """
+    archive_dir = Path(__file__).parent / "archive"
+    archive_dir.mkdir(exist_ok=True)
+
+    # Save dated edition
+    edition_path = archive_dir / f"{date_str}.html"
+    edition_path.write_text(html, encoding="utf-8")
+    logger.info("Archive: saved edition to %s", edition_path)
+
+    # Update index.html listing
+    index_path = archive_dir / "index.html"
+    editions = sorted(
+        [p.stem for p in archive_dir.glob("????-??-??.html")],
+        reverse=True,
+    )
+    edition_links = "\n".join(
+        f'      <li><a href="{d}.html">The Frontier Brief — {d}</a></li>'
+        for d in editions
+    )
+    index_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>The Frontier Brief — Archive</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 600px; margin: 40px auto; padding: 0 20px; color: #1a1a2e; }}
+    h1 {{ font-size: 22px; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; }}
+    ul {{ list-style: none; padding: 0; }}
+    li {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
+    a {{ color: #4a90d9; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    .subtitle {{ color: #888; font-size: 13px; margin-top: -10px; }}
+  </style>
+</head>
+<body>
+  <h1>The Frontier Brief</h1>
+  <p class="subtitle">Signal, not noise. Daily AI newsletter — past editions.</p>
+  <ul>
+{edition_links}
+  </ul>
+</body>
+</html>"""
+    index_path.write_text(index_html, encoding="utf-8")
+    logger.info("Archive: updated index.html with %d editions", len(editions))
+    return edition_path
+
+
 def main() -> None:
     start_time = time.time()
     logger.info("=" * 60)
@@ -69,8 +154,27 @@ def main() -> None:
         logger.critical("Missing required environment variables: %s", ", ".join(missing_vars))
         sys.exit(1)
 
-    # Load data source configuration
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    # Load data source configuration and personalization prefs
     sources = load_sources()
+    prefs = load_prefs()
+
+    # Apply excluded sources from prefs to lab_feeds
+    excluded = set(prefs.get("excluded_sources", []))
+    if excluded:
+        lab_feeds = {k: v for k, v in sources.get("lab_feeds", {}).items() if k not in excluded}
+        logger.info("Prefs: excluding %d source(s): %s", len(excluded), ", ".join(excluded))
+    else:
+        lab_feeds = sources.get("lab_feeds", {})
+
+    # -----------------------------------------------------------------------
+    # Trend detection — load rolling history before ingestion
+    # -----------------------------------------------------------------------
+    topic_history = load_history()
+    trending_topics = detect_heating_topics(topic_history)
+    if trending_topics:
+        logger.info("Trending topics (3+ days): %s", ", ".join(trending_topics[:5]))
 
     # -----------------------------------------------------------------------
     # Stage 1: Ingestion
@@ -79,16 +183,15 @@ def main() -> None:
     logger.info("STAGE 1: Data Ingestion")
     logger.info("-" * 40)
 
-    lab_news = fetch_lab_news(sources.get("lab_feeds", {}))
+    lab_news = fetch_lab_news(lab_feeds)
     reddit_posts = fetch_reddit_sentiment(sources.get("subreddits", []))
     x_posts = fetch_x_sentiment(sources.get("x_search_terms", []))
     github_repos = fetch_github_trending(sources.get("github_trending", {}))
 
-    # Check if we have enough data to produce a newsletter
     total_items = len(lab_news) + len(reddit_posts) + len(x_posts) + len(github_repos)
     logger.info(
         "Ingestion summary: %d lab/startup articles, %d Reddit posts, "
-        "%d X/Twitter posts, %d GitHub repos (%d total)",
+        "%d social posts, %d GitHub repos (%d total)",
         len(lab_news), len(reddit_posts), len(x_posts), len(github_repos), total_items,
     )
 
@@ -115,21 +218,52 @@ def main() -> None:
     payload = build_payload(lab_news, reddit_posts, x_posts, github_repos)
 
     try:
-        newsletter = synthesize(payload)
+        newsletter = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None)
     except Exception as exc:
         logger.critical("Newsletter synthesis failed: %s", exc)
         sys.exit(1)
 
+    # -----------------------------------------------------------------------
+    # Stage 2b: Quality Self-Check
+    # -----------------------------------------------------------------------
+    logger.info("Running quality self-check...")
+    critique = critique_newsletter(newsletter, api_key)
+
+    if not critique.get("approved", True):
+        logger.warning(
+            "Quality check score %s/10 — below threshold. Retrying synthesis once...",
+            critique.get("overall"),
+        )
+        time.sleep(15)  # back off before second Gemini call
+        try:
+            newsletter_retry = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None)
+            critique_retry = critique_newsletter(newsletter_retry, api_key)
+            if critique_retry.get("overall", 0) >= critique.get("overall", 0):
+                logger.info("Retry improved quality score (%s → %s). Using retry.",
+                            critique.get("overall"), critique_retry.get("overall"))
+                newsletter = newsletter_retry
+                critique = critique_retry
+            else:
+                logger.info("Retry did not improve quality. Using original draft.")
+        except Exception as exc:
+            logger.warning("Retry synthesis failed (%s) — falling back to original draft", exc)
+
+    # Apply unverified flags from critic to the newsletter text
+    newsletter = apply_critique_flags(newsletter, critique)
+
     date_str = newsletter.get("generated_date", "Unknown Date")
 
     # -----------------------------------------------------------------------
-    # Stage 3: Rendering & Delivery
+    # Stage 3: Rendering, Archive & Delivery
     # -----------------------------------------------------------------------
     logger.info("-" * 40)
-    logger.info("STAGE 3: HTML Rendering & Email Delivery")
+    logger.info("STAGE 3: HTML Rendering, Archive & Email Delivery")
     logger.info("-" * 40)
 
     html = render_html(newsletter)
+
+    # Save to archive
+    save_archive(html, date_str)
 
     # Retry email delivery once on failure
     try:
@@ -142,6 +276,12 @@ def main() -> None:
         except Exception as exc2:
             logger.critical("Email delivery failed after 2 attempts: %s", exc2)
             sys.exit(1)
+
+    # -----------------------------------------------------------------------
+    # Stage 4: Post-delivery — update trend history
+    # -----------------------------------------------------------------------
+    topic_history = update_history(topic_history, newsletter)
+    save_history(topic_history)
 
     # -----------------------------------------------------------------------
     # Done

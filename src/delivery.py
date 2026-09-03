@@ -23,7 +23,7 @@ SECTION_DIVIDER = (
 
 # Section label font size (the ■ THE BIG STORY line)
 SECTION_LABEL_STYLE = (
-    "margin: 0 0 10px 0; font-size: 13px; font-weight: 800; "
+    "margin: 0 0 10px 0; font-size: 16px; font-weight: 800; "
     "text-transform: uppercase; letter-spacing: 1.5px;"
 )
 
@@ -31,6 +31,24 @@ SECTION_LABEL_STYLE = (
 def _is_url(s: str) -> bool:
     """Return True if the string looks like a real http/https URL."""
     return bool(s) and re.match(r"^https?://", s.strip())
+
+
+def _add_utm(url: str, date_str: str = "") -> str:
+    """
+    Append UTM tracking parameters to an outbound URL.
+
+    This makes the newsletter analytics-ready — readers or evaluators with
+    Google Analytics on their sites will see frontier-brief as a traffic source.
+    Skips URLs that already have query params or are anchor links.
+    """
+    if not _is_url(url):
+        return url
+    campaign = date_str or "newsletter"
+    sep = "&" if "?" in url else "?"
+    return (
+        f"{url}{sep}utm_source=frontier-brief"
+        f"&utm_medium=email&utm_campaign={campaign}"
+    )
 
 
 def _linkify_subreddit(source: str) -> str:
@@ -81,8 +99,9 @@ def render_html(newsletter: dict) -> str:
         raw_url = item.get("source_url", "")
         source_link = ""
         if _is_url(raw_url):
+            utm_url = _add_utm(raw_url.strip(), date_str)
             source_link = (
-                f' <a href="{escape(raw_url.strip())}" '
+                f' <a href="{escape(utm_url)}" '
                 f'style="color: #4a90d9; text-decoration: none; font-size: 13px;">'
                 f'[source]</a>'
             )
@@ -148,7 +167,7 @@ def render_html(newsletter: dict) -> str:
     valid_sources = [s.strip() for s in big_story.get("sources", []) if _is_url(s)]
     if valid_sources:
         links = [
-            f'<a href="{escape(url)}" style="color: #4a90d9; text-decoration: none;">[{i}]</a>'
+            f'<a href="{escape(_add_utm(url, date_str))}" style="color: #4a90d9; text-decoration: none;">[{i}]</a>'
             for i, url in enumerate(valid_sources, 1)
         ]
         source_links_html = (
@@ -304,7 +323,7 @@ def render_html(newsletter: dict) -> str:
           <!-- Two Steps Ahead -->
           <tr>
             <td style="padding: 20px 30px;">
-              <p style="{SECTION_LABEL_STYLE} color: #1a1a2e;">
+              <p style="{SECTION_LABEL_STYLE} color: #000080;">
                 &#9632; Two Steps Ahead
               </p>
               <p style="margin: 0; color: #333; font-size: 15px; line-height: 1.6;">
