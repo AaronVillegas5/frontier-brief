@@ -260,7 +260,7 @@ def main() -> None:
     logger.info("STAGE 3: HTML Rendering, Archive & Email Delivery")
     logger.info("-" * 40)
 
-    html = render_html(newsletter)
+    html = render_html(newsletter, tracking_pixel_url=prefs.get("tracking_pixel_url", ""))
 
     # Save to archive
     save_archive(html, date_str)

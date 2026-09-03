@@ -77,7 +77,7 @@ def _format_stars(stars: str) -> str:
     return s
 
 
-def render_html(newsletter: dict) -> str:
+def render_html(newsletter: dict, tracking_pixel_url: str = "") -> str:
     """
     Render the newsletter dict into a clean, responsive HTML email.
 
@@ -349,10 +349,13 @@ def render_html(newsletter: dict) -> str:
     </tr>
   </table>
   <!-- End Wrapper -->
+"""
+    if tracking_pixel_url:
+        sep = "&" if "?" in tracking_pixel_url else "?"
+        pixel_url = f"{tracking_pixel_url}{sep}campaign={date_str}"
+        html += f'\n  <img src="{escape(pixel_url)}" width="1" height="1" alt="" style="display:none;" />'
 
-</body>
-</html>"""
-
+    html += "\n</body>\n</html>"
     logger.info("HTML email rendered (%d bytes)", len(html))
     return html
 
