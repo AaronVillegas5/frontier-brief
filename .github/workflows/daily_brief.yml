@@ -37,14 +37,14 @@ jobs:
         run: python main.py
 
       - name: Commit trend history
-        # Commits data/topic_history.json back to master so the next run
+        # Commits data/topic_history.json back to main so the next run
         # can read the rolling topic window for trend detection.
         run: |
           git config user.name "frontier-brief[bot]"
           git config user.email "frontier-brief[bot]@users.noreply.github.com"
           git add data/topic_history.json || true
           git diff --staged --quiet || git commit -m "chore(data): update topic history [skip ci]"
-          git push origin HEAD:master || true
+          git push origin HEAD:main || true
 
       - name: Publish archive to GitHub Pages
         # Copies the archive/ directory to the gh-pages branch so each
@@ -69,5 +69,5 @@ jobs:
             || git commit -m "archive: publish edition $(date -u '+%Y-%m-%d') [skip ci]"
           git push origin gh-pages || true
 
-          # Return to master
-          git checkout master
+          # Return to main
+          git checkout main
