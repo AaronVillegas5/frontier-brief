@@ -67,36 +67,38 @@ jobs:
           # Copy archive files in
           cp -r /tmp/frontier-archive/* . 2>/dev/null || true
 
-          # Regenerate index.html to include all past editions
-          cat << 'EOF' > index.html
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <title>The Frontier Brief — Archive</title>
-            <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                      max-width: 600px; margin: 40px auto; padding: 0 20px; color: #1a1a2e; }
-              h1 { font-size: 22px; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; }
-              ul { list-style: none; padding: 0; }
-              li { padding: 8px 0; border-bottom: 1px solid #eee; }
-              a { color: #4a90d9; text-decoration: none; }
-              a:hover { text-decoration: underline; }
-              .subtitle { color: #888; font-size: 13px; margin-top: -10px; }
-            </style>
-          </head>
-          <body>
-            <h1>The Frontier Brief</h1>
-            <p class="subtitle">Signal, not noise. Daily AI newsletter — past editions.</p>
-            <ul>
-          EOF
-          
-          # Find all HTML files starting with 20, sort descending, and append to list
-          for file in $(ls 20*.html 2>/dev/null | sort -r); do
-            date_str="${file%.html}"
-            echo "      <li><a href=\"$file\">The Frontier Brief — $date_str</a></li>" >> index.html
-          done
-          echo "  </ul></body></html>" >> index.html
+          # Regenerate index.html using Python for reliable encoding
+          python -c "
+import glob
+files = sorted(glob.glob('20*.html'), reverse=True)
+links = '\n'.join(f'      <li><a href=\"{f}\">The Frontier Brief &mdash; {f[:-5]}</a></li>' for f in files)
+html = '''<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\">
+  <title>The Frontier Brief &mdash; Archive</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+            max-width: 600px; margin: 40px auto; padding: 0 20px; color: #1a1a2e; }
+    h1 { font-size: 22px; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 8px 0; border-bottom: 1px solid #eee; }
+    a { color: #4a90d9; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .subtitle { color: #888; font-size: 13px; margin-top: -10px; }
+  </style>
+</head>
+<body>
+  <h1>The Frontier Brief</h1>
+  <p class=\"subtitle\">Signal, not noise. Daily AI newsletter &mdash; past editions.</p>
+  <ul>
+''' + links + '''
+  </ul>
+</body>
+</html>'''
+open('index.html', 'w', encoding='utf-8').write(html)
+print(f'Generated index.html with {len(files)} editions')
+"
 
           # Commit and push
           git add -A
