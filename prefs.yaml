@@ -1,59 +1,25 @@
 # The Frontier Brief — Personalization Preferences
-#
-# Fork this repo and edit this file to customize your newsletter.
-# No code changes required — the pipeline reads this on every run.
-#
-# GitHub Actions tip: You can also override any of these by adding a
-# repository variable (Settings → Variables → Actions) with the same
-# key name prefixed by PREF_, e.g. PREF_TOPIC_FOCUS=cybersecurity
+# Updated via Dashboard
 
-# ---------------------------------------------------------------------------
-# Topic focus — tell Gemini what you care about most.
-# These are injected into the synthesis prompt to bias editorial selection.
-# Leave empty ([]) for the default broad AI coverage.
-# ---------------------------------------------------------------------------
 topic_focus:
   - artificial intelligence
   - large language models
   - AI agents
   - AI safety
   - open source AI
+  - cybersecurity
+  - computer vision
+  - robotics
 
-# ---------------------------------------------------------------------------
-# Preferred sources — boost stories from these sources in selection.
-# Must match the key names in sources.yaml exactly.
-# Leave empty ([]) to treat all sources equally.
-# ---------------------------------------------------------------------------
 preferred_sources: []
-#  - OpenAI
-#  - Google DeepMind
-#  - Anthropic
 
-# ---------------------------------------------------------------------------
-# Excluded sources — omit these entirely from ingestion.
-# Useful if a feed is consistently off-topic for your interests.
-# ---------------------------------------------------------------------------
 excluded_sources: []
-#  - Stability AI
 
-# ---------------------------------------------------------------------------
-# Newsletter sections — control how many items each section includes.
-# ---------------------------------------------------------------------------
-frontier_watch_count: 3      # number of quick-hit items (2-4)
-hot_takes_count: 3           # number of community hot takes (2-4)
+frontier_watch_count: 3
+hot_takes_count: 3
 
-# ---------------------------------------------------------------------------
-# Audience tone — adjust Gemini's editorial voice.
-# Options: "non-technical business owner" (default), "developer", "investor"
-# ---------------------------------------------------------------------------
 audience: "non-technical business owner"
 
-# ---------------------------------------------------------------------------
-# Analytics — Open Rate Tracking Pixel (Optional)
-# To track open rates for free, host a 1x1 transparent PNG on a free static 
-# server (like AWS S3 or Cloudflare R2) and put the full URL here.
-# The pipeline will inject an invisible <img> tag at the bottom of the email.
-# Example: "https://my-bucket.s3.amazonaws.com/1x1.png"
-# Leave empty ("") to disable open rate tracking.
-# ---------------------------------------------------------------------------
 tracking_pixel_url: ""
+
+allow_telemetry: true
