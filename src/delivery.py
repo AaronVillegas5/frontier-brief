@@ -336,8 +336,12 @@ def render_html(newsletter: dict, tracking_pixel_url: str = "", github_actor: st
           <tr>
             <td style="padding: 20px 30px; text-align: center; border-top: 3px solid #1a1a2e;">
               <p style="margin: 0 0 10px 0; font-size: 13px;">
-                <a href="https://AaronVillegas5.github.io/frontier-brief/" style="color: #4a90d9; text-decoration: none;">
+                <a href="{escape(newsletter.get('archive_url', '#'))}" style="color: #4a90d9; text-decoration: none;">
                   View Web Archive
+                </a>
+                &nbsp;&middot;&nbsp;
+                <a href="https://aaronvillegas5.github.io/frontier-brief/dashboard.html" style="color: #4a90d9; text-decoration: none;">
+                  Manage Preferences
                 </a>
               </p>
               <p style="margin: 0; font-size: 12px; color: #aaa;">
