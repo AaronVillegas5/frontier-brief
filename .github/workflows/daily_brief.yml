@@ -57,8 +57,12 @@ jobs:
           cp -r archive /tmp/frontier-archive
 
           # Switch to gh-pages (create orphan branch on first run)
-          git fetch origin gh-pages 2>/dev/null && git checkout gh-pages \
-            || git checkout --orphan gh-pages && git rm -rf . --quiet
+          if git fetch origin gh-pages 2>/dev/null; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . --quiet
+          fi
 
           # Copy archive files in
           cp -r /tmp/frontier-archive/* . 2>/dev/null || true
