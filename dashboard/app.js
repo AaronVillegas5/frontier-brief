@@ -10,8 +10,7 @@
 // Configuration
 // -------------------------------------------------------------------------
 const CLIENT_ID = "Iv23lia9N65dm8Y9Tqpf";
-// TODO: Replace with your deployed Cloudflare Worker URL after running `wrangler deploy`
-const WORKER_URL = "https://frontier-brief-oauth.YOUR_SUBDOMAIN.workers.dev";
+const WORKER_URL = "https://frontier-brief-oauth.aaronvillegas5.workers.dev";
 const REPO_NAME = "frontier-brief";
 const PREFS_PATH = "prefs.yaml";
 
