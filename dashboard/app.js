@@ -39,7 +39,8 @@ const usernameEl = document.getElementById("username");
 // Step 1: Redirect to GitHub for authorization
 loginBtn.addEventListener("click", (e) => {
   e.preventDefault();
-  const redirectUri = window.location.href.split("?")[0]; // Current page without query params
+  // Hardcode the exact lowercase URI to avoid case-mismatch issues with GitHub OAuth
+  const redirectUri = "https://aaronvillegas5.github.io/frontier-brief/dashboard.html";
   const scope = "public_repo"; // Only access to public repositories
   window.location.href =
     `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}`;
