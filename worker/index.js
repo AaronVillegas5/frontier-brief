@@ -22,7 +22,7 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
-          "Access-Control-Allow-Origin": "https://AaronVillegas5.github.io",
+          "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type",
         },
@@ -63,7 +63,7 @@ export default {
     return new Response(JSON.stringify(tokenData), {
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "https://AaronVillegas5.github.io",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   },
