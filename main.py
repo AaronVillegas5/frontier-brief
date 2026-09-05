@@ -83,9 +83,7 @@ def load_prefs() -> dict:
 
 def save_archive(html: str, date_str: str) -> Path | None:
     """
-    Save the rendered newsletter HTML to archive/YYYY-MM-DD.html and update
-    archive/index.html with a link to the latest edition.
-
+    Save the rendered newsletter HTML to archive/YYYY-MM-DD.html.
     The archive/ directory is committed to the gh-pages branch by the
     GitHub Actions workflow after each run.
     """
@@ -97,42 +95,6 @@ def save_archive(html: str, date_str: str) -> Path | None:
     edition_path.write_text(html, encoding="utf-8")
     logger.info("Archive: saved edition to %s", edition_path)
 
-    # Update index.html listing
-    index_path = archive_dir / "index.html"
-    editions = sorted(
-        [p.stem for p in archive_dir.glob("????-??-??.html")],
-        reverse=True,
-    )
-    edition_links = "\n".join(
-        f'      <li><a href="{d}.html">The Frontier Brief — {d}</a></li>'
-        for d in editions
-    )
-    index_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>The Frontier Brief — Archive</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            max-width: 600px; margin: 40px auto; padding: 0 20px; color: #1a1a2e; }}
-    h1 {{ font-size: 22px; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; }}
-    ul {{ list-style: none; padding: 0; }}
-    li {{ padding: 8px 0; border-bottom: 1px solid #eee; }}
-    a {{ color: #4a90d9; text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
-    .subtitle {{ color: #888; font-size: 13px; margin-top: -10px; }}
-  </style>
-</head>
-<body>
-  <h1>The Frontier Brief</h1>
-  <p class="subtitle">Signal, not noise. Daily AI newsletter — past editions.</p>
-  <ul>
-{edition_links}
-  </ul>
-</body>
-</html>"""
-    index_path.write_text(index_html, encoding="utf-8")
-    logger.info("Archive: updated index.html with %d editions", len(editions))
     return edition_path
 
 
