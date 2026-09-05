@@ -387,6 +387,137 @@ def _stub_newsletter() -> dict:
         "generated_date": "2026-09-02",
     }
 
+# ---------------------------------------------------------------------------
+# delivery.py — UTM parameter tests
+# ---------------------------------------------------------------------------
+
+class TestUTMParameters(unittest.TestCase):
+
+    def test_add_utm_appends_params(self):
+        from src.delivery import _add_utm
+        result = _add_utm("https://example.com/article", "2026-09-05")
+        self.assertIn("utm_source=frontier-brief", result)
+        self.assertIn("utm_medium=email", result)
+        self.assertIn("utm_campaign=2026-09-05", result)
+
+    def test_add_utm_uses_question_mark_separator(self):
+        from src.delivery import _add_utm
+        result = _add_utm("https://example.com/article", "2026-09-05")
+        self.assertIn("?utm_source=", result)
+
+    def test_add_utm_uses_ampersand_if_query_exists(self):
+        from src.delivery import _add_utm
+        result = _add_utm("https://example.com/article?page=1", "2026-09-05")
+        self.assertIn("&utm_source=", result)
+
+    def test_add_utm_skips_non_urls(self):
+        from src.delivery import _add_utm
+        self.assertEqual(_add_utm("Google DeepMind", "2026-09-05"), "Google DeepMind")
+        self.assertEqual(_add_utm("", "2026-09-05"), "")
+
+    def test_add_utm_default_campaign(self):
+        from src.delivery import _add_utm
+        result = _add_utm("https://example.com/article")
+        self.assertIn("utm_campaign=newsletter", result)
+
+
+# ---------------------------------------------------------------------------
+# trends.py tests
+# ---------------------------------------------------------------------------
+
+class TestTrendDetection(unittest.TestCase):
+
+    def test_extract_topics_from_newsletter(self):
+        from src.trends import extract_topics
+        newsletter = _stub_newsletter()
+        topics = extract_topics(newsletter)
+        self.assertIsInstance(topics, list)
+        self.assertGreater(len(topics), 0)
+        # Should filter out stopwords and short words
+        for topic in topics:
+            self.assertGreater(len(topic), 3)
+
+    def test_extract_topics_empty_newsletter(self):
+        from src.trends import extract_topics
+        empty = {
+            "the_big_story": {"headline": "", "why_it_matters": ""},
+            "frontier_watch": [],
+            "repo_of_the_day": {"description": ""},
+            "two_steps_ahead": {"body": ""},
+        }
+        topics = extract_topics(empty)
+        self.assertIsInstance(topics, list)
+
+    def test_detect_heating_below_threshold(self):
+        from src.trends import detect_heating_topics
+        # Only 2 days of data — threshold is 3
+        history = {
+            "2026-09-01": ["agents", "safety"],
+            "2026-09-02": ["agents", "models"],
+        }
+        result = detect_heating_topics(history)
+        self.assertEqual(result, [])
+
+    def test_detect_heating_at_threshold(self):
+        from src.trends import detect_heating_topics
+        history = {
+            "2026-09-01": ["agents", "safety", "models"],
+            "2026-09-02": ["agents", "fine-tuning"],
+            "2026-09-03": ["agents", "safety"],
+        }
+        result = detect_heating_topics(history)
+        self.assertIn("agents", result)
+
+    def test_detect_heating_does_not_flag_rare_topics(self):
+        from src.trends import detect_heating_topics
+        history = {
+            "2026-09-01": ["agents", "safety"],
+            "2026-09-02": ["agents", "models"],
+            "2026-09-03": ["agents", "fine-tuning"],
+        }
+        result = detect_heating_topics(history)
+        self.assertNotIn("models", result)
+        self.assertNotIn("fine-tuning", result)
+
+    def test_update_history_adds_today(self):
+        from src.trends import update_history
+        history = {"2026-09-01": ["agents"]}
+        newsletter = _stub_newsletter()
+        updated = update_history(history, newsletter)
+        # Should have 2 dates now
+        self.assertEqual(len(updated), 2)
+
+    def test_update_history_prunes_old_entries(self):
+        from src.trends import update_history
+        old_date = "2020-01-01"
+        history = {old_date: ["ancient-topic"]}
+        newsletter = _stub_newsletter()
+        updated = update_history(history, newsletter)
+        self.assertNotIn(old_date, updated)
+
+
+# ---------------------------------------------------------------------------
+# pipeline.py — critique flag application tests
+# ---------------------------------------------------------------------------
+
+class TestCritiqueFlags(unittest.TestCase):
+
+    def test_apply_flags_adds_note(self):
+        from src.pipeline import apply_critique_flags
+        newsletter = _stub_newsletter()
+        # Flag must contain a word >5 chars that appears in the body ("paragraph")
+        critique = {"flags": ["The second paragraph claim is unverified"]}
+        result = apply_critique_flags(newsletter, critique)
+        self.assertIn("[Note:", result["the_big_story"]["body"])
+
+    def test_apply_flags_no_flags_unchanged(self):
+        from src.pipeline import apply_critique_flags
+        newsletter = _stub_newsletter()
+        original_body = newsletter["the_big_story"]["body"]
+        critique = {"flags": []}
+        result = apply_critique_flags(newsletter, critique)
+        self.assertEqual(result["the_big_story"]["body"], original_body)
+
 
 if __name__ == "__main__":
     # Strip --live from argv before passing to unittest
