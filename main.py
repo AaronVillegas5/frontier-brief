@@ -222,7 +222,18 @@ def main() -> None:
     logger.info("STAGE 3: HTML Rendering, Archive & Email Delivery")
     logger.info("-" * 40)
 
-    html = render_html(newsletter, tracking_pixel_url=prefs.get("tracking_pixel_url", ""))
+    # Determine tracking pixel user identifier (opt-out via prefs)
+    tracking_pixel_url = prefs.get("tracking_pixel_url", "")
+    github_actor = ""
+    if tracking_pixel_url and prefs.get("allow_telemetry", True):
+        raw_actor = os.environ.get("GITHUB_ACTOR", "")
+        if raw_actor:
+            import hashlib
+            # Hash the username so it is completely anonymous but still tracks unique opens
+            github_actor = hashlib.sha256(raw_actor.encode("utf-8")).hexdigest()[:12]
+            logger.info("Telemetry enabled: tracking anonymous_user=%s", github_actor)
+
+    html = render_html(newsletter, tracking_pixel_url=tracking_pixel_url, github_actor=github_actor)
 
     # Save to archive
     save_archive(html, date_str)

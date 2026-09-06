@@ -77,7 +77,7 @@ def _format_stars(stars: str) -> str:
     return s
 
 
-def render_html(newsletter: dict, tracking_pixel_url: str = "") -> str:
+def render_html(newsletter: dict, tracking_pixel_url: str = "", github_actor: str = "") -> str:
     """
     Render the newsletter dict into a clean, responsive HTML email.
 
@@ -336,8 +336,12 @@ def render_html(newsletter: dict, tracking_pixel_url: str = "") -> str:
           <tr>
             <td style="padding: 20px 30px; text-align: center; border-top: 3px solid #1a1a2e;">
               <p style="margin: 0 0 10px 0; font-size: 13px;">
-                <a href="https://AaronVillegas5.github.io/frontier-brief/" style="color: #4a90d9; text-decoration: none;">
+                <a href="{escape(newsletter.get('archive_url', '#'))}" style="color: #4a90d9; text-decoration: none;">
                   View Web Archive
+                </a>
+                &nbsp;&middot;&nbsp;
+                <a href="https://aaronvillegas5.github.io/frontier-brief/dashboard.html" style="color: #4a90d9; text-decoration: none;">
+                  Manage Preferences
                 </a>
               </p>
               <p style="margin: 0; font-size: 12px; color: #aaa;">
@@ -358,6 +362,8 @@ def render_html(newsletter: dict, tracking_pixel_url: str = "") -> str:
     if tracking_pixel_url:
         sep = "&" if "?" in tracking_pixel_url else "?"
         pixel_url = f"{tracking_pixel_url}{sep}campaign={date_str}"
+        if github_actor:
+            pixel_url += f"&user={github_actor}"
         html += f'\n  <img src="{escape(pixel_url)}" width="1" height="1" alt="" style="display:none;" />'
 
     html += "\n</body>\n</html>"
