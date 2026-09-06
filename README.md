@@ -1,101 +1,53 @@
 # The Frontier Brief
 
-A fully automated daily AI newsletter that pulls the latest from major AI labs and startups, captures community sentiment from Reddit and X/Twitter, highlights trending GitHub repos, and explains why it all matters — written for non-technical readers.
+A fully automated daily AI newsletter that pulls the latest from major AI labs and startups, captures community sentiment from Reddit and open developer networks, highlights trending GitHub repositories, and explains why it all matters — written for non-technical leaders and operators.
 
-👉 **[Read the Live Web Archive here](https://AaronVillegas5.github.io/frontier-brief/)** 👈
+👉 **[Live Web Archive](https://aaronvillegas5.github.io/frontier-brief/)** &middot; **[Web Preferences Dashboard](https://aaronvillegas5.github.io/frontier-brief/dashboard.html)** 👈
 
-Runs on GitHub Actions. Costs nothing. Ships by email every day at 09:00 UTC.
+Runs on GitHub Actions. Costs $0.00 to operate. Ships by email every morning at 09:00 UTC.
+
+---
+
+## Key Features & Stretch Goals
+
+* **13 Ingestion Feeds:** Scrapes OpenAI, DeepMind, Anthropic, Meta, Hugging Face, Mistral (HTML parser), Reddit RSS (r/MachineLearning, r/LocalLLaMA, r/singularity), Mastodon, Hacker News (Algolia API), and GitHub Trending.
+* **Strict JSON Synthesis:** Gemini 3.1 Flash-Lite constrained by a strict JSON schema—never produces broken markdown or invalid HTML.
+* **Autonomous LLM Critic:** Self-evaluates drafts for accuracy, clarity, and hype ratio. Triggers automatic re-synthesis if quality falls below threshold, and flags single-source claims with `[Note: Unverified]`.
+* **Personalization Engine (`prefs.yaml`):** Readers can configure topic focus, audience tone (e.g. non-technical vs. developer), and source exclusions without changing code.
+* **Serverless Web Dashboard:** A responsive single-page web app hosted on GitHub Pages that allows non-technical users to configure preferences via GitHub OAuth and an edge Cloudflare Worker proxy.
+* **7-Day Trend Detection:** Tracks multi-day recurring topics across a rolling 7-day window committed directly to Git. Highlights "heating topics" in synthesis.
+* **Privacy-Preserving Analytics:** All outbound links include UTM campaign tracking. Open rates are supported via a 1x1 tracking pixel using SHA-256 hashed user identifiers for complete anonymity, with an opt-out toggle in preferences.
+* **Permanent Web Archive:** Automatically generates and indexes responsive HTML editions on the `gh-pages` branch on every run.
+* **54 Automated Unit Tests:** Comprehensive test suite covering ingestion, backoff retry logic, schema validation, trend detection, and UTM parsing.
 
 ---
 
 ## Quick Start (5 Minutes)
 
 ### 1. Fork the Repository
+Click **Fork** at the top right of this repository to create your personal copy.
 
-Click the **Fork** button at the top right of this GitHub page. This creates your own copy of the project.
+### 2. Get Free API Keys
+* **Gemini API Key:** Create a free key at [Google AI Studio](https://aistudio.google.com/apikey).
+* **Resend API Key:** Create a free account at [Resend](https://resend.com) and generate an API key.
 
-### 2. Get Your API Keys
-
-You need two free API keys:
-
-**Gemini API Key** (Google AI — free tier):
-1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
-2. Sign in with your Google account
-3. Click **Create API Key**
-4. Copy the key — you'll need it in step 3
-
-**Resend API Key** (email delivery — free tier):
-1. Go to [Resend](https://resend.com) and create a free account
-2. Go to **API Keys** in the sidebar
-3. Click **Create API Key**, give it a name like "frontier-brief"
-4. Copy the key — you'll need it in step 3
-
-> **Note**: On Resend's free tier, emails can only be sent from `onboarding@resend.dev` and can only be delivered to the email address you used to create your Resend account.
+> **Note:** On Resend's free tier, emails are sent from `onboarding@resend.dev` and delivered to your registered Resend account email.
 
 ### 3. Configure GitHub Secrets
-
-In your forked repository:
-
-1. Go to **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret** and add each of these:
+In your forked repository, go to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
 
 | Secret Name | Value |
 |---|---|
-| `GEMINI_API_KEY` | Your Gemini API key from step 2 |
-| `RESEND_API_KEY` | Your Resend API key from step 2 |
-| `FROM_EMAIL` | `onboarding@resend.dev` (use this exact value for free tier) |
-| `TO_EMAIL` | The email you registered with on Resend |
+| `GEMINI_API_KEY` | Your Gemini API key from Google AI Studio |
+| `RESEND_API_KEY` | Your Resend API key from Resend |
+| `FROM_EMAIL` | `onboarding@resend.dev` |
+| `TO_EMAIL` | Your recipient email registered on Resend |
 
-### 4. Test It
-
-1. Go to the **Actions** tab in your repository
-2. Click **The Frontier Brief — Daily Newsletter** in the left sidebar
-3. Click the **Run workflow** button → **Run workflow**
-4. Wait 2-3 minutes for the pipeline to complete
-5. Check your email — you should have today's edition
-
-### 5. You're Done
-
-The newsletter will now run automatically every day at 12:00 PM UTC. No further action needed.
-
----
-
-## How It Works
-
-Every day, the pipeline:
-
-1. **Collects data** from 10+ AI lab and startup RSS feeds, 3 Reddit communities, X/Twitter search bridges, and GitHub's trending page
-2. **Sends everything** to Google's Gemini AI in a single API call with instructions to corroborate facts, cut through hype, and write for a non-technical audience
-3. **Renders** the AI's analysis into a clean HTML email
-4. **Delivers** the email via Resend
-
-The whole process takes about 1-2 minutes and costs nothing on free API tiers.
-
----
-
-## Newsletter Sections
-
-| Section | What It Covers |
-|---|---|
-| **The Big Story** | The single most important AI development today, with context on why it matters |
-| **Frontier Watch** | Quick hits from labs and startups — new models, products, research |
-| **The Street Says** | What Reddit and X are actually saying — hype, skepticism, drama |
-| **Repo of the Day** | One trending GitHub project worth knowing about |
-| **Two Steps Ahead** | Forward-looking analysis — what today's news suggests about tomorrow |
-
----
-
-## Customizing Sources
-
-Edit `sources.yaml` to add or remove data sources:
-
-```yaml
-lab_feeds:
-  My New Source:
-    url: "https://example.com/feed.xml"
-```
-
-Push the change to your fork and it takes effect on the next run.
+### 4. Run & Verify
+1. Go to the **Actions** tab in your repository.
+2. Select **The Frontier Brief — Daily Newsletter** in the left sidebar.
+3. Click **Run workflow** → **Run workflow**.
+4. The pipeline will finish in ~75 seconds. Check your inbox and your GitHub Pages archive.
 
 ---
 
@@ -103,17 +55,31 @@ Push the change to your fork and it takes effect on the next run.
 
 ```
 frontier-brief/
-├── main.py                              # Pipeline entrypoint
-├── sources.yaml                         # Data source configuration
-├── requirements.txt                     # Python dependencies
-├── .env.example                         # Environment variable template
-├── ARCHITECTURE.md                      # Technical architecture document
-├── src/
-│   ├── ingestion.py                     # Data collectors (RSS, Reddit, X, GitHub)
-│   ├── pipeline.py                      # Payload assembly + Gemini synthesis
-│   └── delivery.py                      # HTML rendering + Resend email delivery
+├── main.py                              # Pipeline entrypoint & stage orchestrator
+├── sources.yaml                         # Data sources (RSS feeds, subreddits, social terms)
+├── prefs.yaml                           # User personalization config (topics, tone, telemetry)
+├── requirements.txt                     # Production Python dependencies
+├── .env.example                         # Environment variable template for local dev
+├── ARCHITECTURE.md                      # Detailed technical architecture document
+├── dashboard/                           # Client-side web preferences dashboard
+│   ├── dashboard.html                   # Responsive configuration UI
+│   └── app.js                           # GitHub OAuth & REST API client logic
+├── worker/                              # Serverless OAuth proxy (Cloudflare Workers)
+│   ├── index.js                         # Code-exchange proxy isolating CLIENT_SECRET
+│   └── wrangler.toml                    # Cloudflare deployment config
+├── scripts/                             # Utility & CI automation scripts
+│   └── build_index.py                   # Generates gh-pages archive index.html
+├── src/                                 # Core application modules
+│   ├── ingestion.py                     # Data collectors (RSS, Reddit, Mastodon, HN, GitHub)
+│   ├── pipeline.py                      # Gemini synthesis, JSON schema, & LLM Critic
+│   ├── trends.py                        # Rolling 7-day trend detection engine
+│   └── delivery.py                      # Inline HTML email renderer & Resend delivery
+├── tests/
+│   └── test_suite.py                    # 54 automated unit tests
+├── data/
+│   └── topic_history.json               # Rolling multi-day trend history state
 └── .github/workflows/
-    └── daily_brief.yml                  # GitHub Actions daily schedule
+    └── daily_brief.yml                  # GitHub Actions cron (09:00 UTC) & dispatch workflow
 ```
 
 ---
@@ -121,56 +87,43 @@ frontier-brief/
 ## Running Locally
 
 ```bash
-# Clone your fork
+# Clone the repository
 git clone https://github.com/YOUR_USERNAME/frontier-brief.git
 cd frontier-brief
 
-# Create a virtual environment
+# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate   # On Windows: venv\Scripts\activate
+source venv/bin/activate        # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up your environment
+# Configure environment variables
 cp .env.example .env
-# Edit .env with your API keys
+# Fill in GEMINI_API_KEY, RESEND_API_KEY, and TO_EMAIL in .env
 
-# Run the pipeline
+# Run the test suite (54 tests)
+python tests/test_suite.py
+
+# Run the end-to-end pipeline
 python main.py
 ```
 
 ---
 
-## Troubleshooting
+## Rate Limits & Resource Usage
 
-**Pipeline fails with "Missing required environment variables"**
-→ Double-check that all four secrets are set in Settings → Secrets → Actions. The names must match exactly: `GEMINI_API_KEY`, `RESEND_API_KEY`, `FROM_EMAIL`, `TO_EMAIL`.
-
-**Email never arrives**
-→ On Resend's free tier, `TO_EMAIL` must be the same email you registered with. Check your spam folder. Verify your Resend API key is active at [resend.com/api-keys](https://resend.com/api-keys).
-
-**"All data sources returned empty results"**
-→ This usually means temporary network issues or rate limiting. Wait an hour and trigger the workflow manually. If it persists, some RSS feed URLs in `sources.yaml` may have changed — check the logs in the Actions tab for specific error messages.
-
-**Gemini synthesis fails**
-→ Verify your Gemini API key at [aistudio.google.com](https://aistudio.google.com). The free tier allows 500 requests per day — if you've been testing heavily, you may have hit the limit.
-
----
-
-## Rate Limits & Costs
-
-| Service | Free Tier Limit | This Project Uses |
+| Service | Free Tier Allocation | Frontier Brief Usage |
 |---|---|---|
-| Gemini API | 15 RPM, 500 RPD | 1 request per day |
-| Resend | 100 emails/day, 3,000/month | 1 email per day |
-| Reddit RSS | ~60 requests/hour (estimated) | 3 requests per run |
-| GitHub | No auth required for trending page | 1 request per run |
-
-Everything fits comfortably within free tiers.
+| **GitHub Actions** | 2,000 min / month | ~38 min / month (1.2 min / day) |
+| **Gemini 3.1 Flash-Lite** | 15 RPM, 500 RPD | 1–2 requests / day (~15k tokens) |
+| **Resend** | 100 emails / day | 1 email / day |
+| **Reddit RSS** | ~60 req / hr | 3 req / day (6s delay between calls) |
+| **HN / Algolia** | 10,000 req / hr | 3 req / day |
+| **Cloudflare Workers** | 100,000 req / day | On-demand for dashboard saves only |
 
 ---
 
 ## License
 
-MIT
+MIT License
