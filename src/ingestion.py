@@ -48,7 +48,9 @@ def _retry(func, *args, **kwargs) -> Any:
                     attempt + 1, MAX_RETRIES, func.__name__, exc, delay,
                 )
                 time.sleep(delay)
-    raise last_exc
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Retries exhausted without exception for {getattr(func, '__name__', str(func))}")
 
 
 def _strip_html(html_text: str) -> str:

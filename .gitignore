@@ -8,6 +8,8 @@ dist/
 build/
 .eggs/
 *.egg
+architecture_clean.html
+architecture_diagram.html    
 
 # IDE
 .vscode/
@@ -25,3 +27,6 @@ venv/
 .venv/
 env/
 archive/
+
+# Cloudflare Wrangler
+.wrangler/

@@ -214,6 +214,8 @@ def main() -> None:
     newsletter = apply_critique_flags(newsletter, critique)
 
     date_str = newsletter.get("generated_date", "Unknown Date")
+    repo_owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "aaronvillegas5").lower()
+    newsletter["archive_url"] = f"https://{repo_owner}.github.io/frontier-brief/{date_str}.html"
 
     # -----------------------------------------------------------------------
     # Stage 3: Rendering, Archive & Delivery
