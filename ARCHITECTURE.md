@@ -1,135 +1,164 @@
 # Architecture — The Frontier Brief
 
+Deterministic, serverless daily AI newsletter pipeline with autonomous quality verification and zero operating costs.
+
+---
+
 ## Pipeline Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        GITHUB ACTIONS CRON                         │
-│                     (daily @ 12:00 UTC)                            │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │   main.py    │
-                    │  Entrypoint  │
-                    └──────┬───────┘
-                           │
-           ┌───────────────┼───────────────┐
-           ▼               ▼               ▼
-  ┌─────────────────────────────────────────────────┐
-  │            STAGE 1: INGESTION                   │
-  │           src/ingestion.py                      │
-  │                                                 │
-  │  ┌──────────┐ ┌──────────┐ ┌────────┐ ┌──────┐ │
-  │  │ Lab/     │ │ Reddit   │ │ X/     │ │GitHub│ │
-  │  │ Startup  │ │ RSS      │ │Twitter │ │Trend-│ │
-  │  │ RSS      │ │ Feeds    │ │Bridges │ │ ing  │ │
-  │  │ Feeds    │ │          │ │        │ │Scrape│ │
-  │  └────┬─────┘ └────┬─────┘ └───┬────┘ └──┬───┘ │
-  │       │            │           │          │     │
-  │       ▼            ▼           ▼          ▼     │
-  │   [articles]   [posts]     [tweets]    [repos]  │
-  └────────────────────┬────────────────────────────┘
-                       │
-                       ▼
-  ┌─────────────────────────────────────────────────┐
-  │            STAGE 2: SYNTHESIS                   │
-  │           src/pipeline.py                       │
-  │                                                 │
-  │  ┌──────────────────────────────────────────┐   │
-  │  │ build_payload()                          │   │
-  │  │ Assemble JSON, enforce token budget      │   │
-  │  └──────────────────┬───────────────────────┘   │
-  │                     │                           │
-  │                     ▼                           │
-  │  ┌──────────────────────────────────────────┐   │
-  │  │ synthesize()                             │   │
-  │  │ Single call to Gemini 3.1 Flash-Lite     │   │
-  │  │ System prompt: skeptical, plain-English  │   │
-  │  │ Output: structured JSON (5 sections)     │   │
-  │  └──────────────────┬───────────────────────┘   │
-  │                     │                           │
-  │                     ▼                           │
-  │            [validated newsletter JSON]           │
-  └────────────────────┬────────────────────────────┘
-                       │
-                       ▼
-  ┌─────────────────────────────────────────────────┐
-  │            STAGE 3: DELIVERY                    │
-  │           src/delivery.py                       │
-  │                                                 │
-  │  ┌──────────────────────────────────────────┐   │
-  │  │ render_html()                            │   │
-  │  │ Inline CSS, responsive, single-column    │   │
-  │  └──────────────────┬───────────────────────┘   │
-  │                     │                           │
-  │                     ▼                           │
-  │  ┌──────────────────────────────────────────┐   │
-  │  │ send_email()                             │   │
-  │  │ Resend API delivery                      │   │
-  │  └──────────────────────────────────────────┘   │
-  └─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               GITHUB ACTIONS CRON                                      │
+│                               (daily @ 09:00 UTC)                                      │
+└───────────────────────────────────────────┬────────────────────────────────────────────┘
+                                            │
+                                            ▼
+                                    ┌──────────────┐
+                                    │   main.py    │
+                                    │  Entrypoint  │
+                                    └──────┬───────┘
+                                           │
+         ┌─────────────────────────────────┼─────────────────────────────────┐
+         ▼                                 ▼                                 ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ STAGE 1: INGESTION (src/ingestion.py)                                                  │
+│                                                                                        │
+│ ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
+│ │ Lab/Startup RSS  │  │ Reddit RSS       │  │ Mastodon/HN/X    │  │ GitHub Trending  │ │
+│ │ (8 Feeds + BS4)  │  │ (3 Subreddits)   │  │ (Tags & Algolia) │  │ (Scraped Repos)  │ │
+│ └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘ │
+│          │                     │                     │                     │           │
+│          ▼                     ▼                     ▼                     ▼           │
+│     [articles]              [posts]               [takes]               [repos]        │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ STAGE 2: SYNTHESIS & QUALITY CONTROL (src/pipeline.py)                                │
+│                                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ build_payload()                                                                  │  │
+│  │ Assemble raw data, enforce < 100k char budget, inject trends & prefs.yaml        │  │
+│  └───────────────────────────────────────┬──────────────────────────────────────────┘  │
+│                                          │                                             │
+│                                          ▼                                             │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ synthesize() — Gemini 3.1 Flash-Lite                                             │  │
+│  │ System Prompt: editorial principles, "why it matters", plain-English translation  │  │
+│  │ Output: strict JSON Schema enforcement (5 sections, zero Markdown breaks)         │  │
+│  └───────────────────────────────────────┬──────────────────────────────────────────┘  │
+│                                          │                                             │
+│                                          ▼                                             │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ critique_newsletter() — Autonomous Critic Pass                                   │  │
+│  │ Evaluates accuracy, hype ratio, and source diversity. Retries synthesis if < 7/10│  │
+│  │ apply_critique_flags() tags unverified single-source claims with disclaimers      │  │
+│  └───────────────────────────────────────┬──────────────────────────────────────────┘  │
+│                                          │                                             │
+│                                          ▼                                             │
+│                             [validated newsletter JSON]                                │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ STAGE 3: RENDERING & DELIVERY (src/delivery.py)                                        │
+│                                                                                        │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ render_html()                                                                    │  │
+│  │ Deterministic inline CSS, responsive 600px table layout, sentiment color badges   │  │
+│  └───────────────────┬──────────────────────────────────────────┬───────────────────┘  │
+│                      │                                          │                      │
+│                      ▼                                          ▼                      │
+│  ┌────────────────────────────────────────┐  ┌──────────────────────────────────────┐  │
+│  │ send_email()                           │  │ save_archive() & GitHub Pages Deploy │  │
+│  │ Resend API delivery to recipient       │  │ Writes YYYY-MM-DD.html, rebuilds     │  │
+│  │ Includes anonymous 1x1 telemetry pixel │  │ index.html, pushes to gh-pages branch│  │
+│  └────────────────────────────────────────┘  └──────────────────────────────────────┘  │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ STAGE 4: STATE MANAGEMENT (src/trends.py)                                              │
+│                                                                                        │
+│ Commits updated 7-day topic_history.json to main branch for rolling trend detection    │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## Source Catalog
 
-| Source | Method | URL / Endpoint | Rate Limits | Reliability |
+| Source | Method | Endpoint / Mechanism | Rate Limits / Pacing | Reliability |
 |---|---|---|---|---|
 | OpenAI Blog | RSS (feedparser) | `openai.com/news/rss.xml` | None | High |
-| Anthropic News | RSSHub bridge | `rsshub.app/anthropic/news` | RSSHub limits | Medium — community-maintained |
+| Anthropic News | RSSHub / RSS | `rsshub.app/anthropic/news` | Public bridge limits | Medium |
 | Google DeepMind | RSS (feedparser) | `deepmind.google/blog/feed/basic/` | None | High |
-| Meta Research | RSS (feedparser) | `research.facebook.com/feed/` | None | High |
+| Meta AI Research | RSS (feedparser) | `research.facebook.com/feed/` | None | High |
 | Meta Engineering | RSS (feedparser) | `engineering.fb.com/feed/` | None | High |
-| Mistral AI | RSS (feedparser) | `mistral.ai/news/index.xml` | None | High |
+| Mistral AI | HTML Parser (BS4) | `mistral.ai/news/` scrape fallback | None | High |
 | Hugging Face | RSS (feedparser) | `huggingface.co/blog/feed.xml` | None | High |
 | Stability AI | RSS (feedparser) | `stability.ai/news/feed` | None | Medium |
 | Cohere | RSS (feedparser) | `cohere.com/blog/rss.xml` | None | Medium |
-| xAI | RSSHub bridge | `rsshub.app/x/user/xaboratory` | RSSHub limits | Low |
 | Together AI | RSS (feedparser) | `together.ai/blog/rss.xml` | None | Medium |
-| Reddit (3 subs) | RSS feed (.rss) | `reddit.com/r/{sub}/hot/.rss` | Undocumented, ~60 req/hr | Medium |
-| X / Twitter | RSSHub / RSS.app | `rsshub.app/x/search/{term}` | Variable | Low — Nitter dead, bridges fragile |
-| GitHub Trending | HTML scraping | `github.com/trending?since=daily` | No auth needed | High |
+| Reddit (3 subs) | RSS feed (.rss) | `reddit.com/r/{sub}/hot/.rss` | 6s pacing delay between calls | High (bypasses 403 API) |
+| Mastodon AI/LLM | REST JSON API | `mastodon.social/api/v1/timelines/tag/{tag}` | Unauthenticated rate budget | High |
+| Hacker News | REST JSON API | `hn.algolia.com/api/v1/search_by_date` | 10,000 req/hr | Very High |
+| GitHub Trending | HTML scraping | `github.com/trending?since=daily` | No auth required | High |
+
+---
 
 ## Failure Recovery Strategy
 
-The pipeline uses a **retry-then-degrade** pattern at every stage:
+The pipeline operates on a **retry-then-degrade** pattern across every stage:
 
-### Ingestion Failures
-- **Retry**: Each HTTP request retries up to 3 times with exponential backoff (1s → 2s → 4s delays).
-- **Degrade**: If a source fails all retries, the collector returns an empty list. The pipeline continues with whatever data was collected.
-- **Abort threshold**: If ALL sources fail (total items = 0), the pipeline exits with code 1 and sends no email. There's no point sending an empty newsletter.
-- **Lab news fallback**: If a feed has no articles in the last 24 hours (common for labs that post monthly), the top 3 most recent entries are used regardless of age, tagged as `recent_fallback` so the LLM knows they aren't breaking news.
+### 1. Ingestion Failures
+- **Exponential Backoff:** All HTTP calls retry up to 3 times with exponential backoff (1s → 2s → 4s delays).
+- **Graceful Degradation:** If a feed exhausts retries, the collector logs a warning and returns an empty list. The pipeline continues with remaining sources.
+- **Reddit Rate Pacing:** Unauthenticated Reddit requests enforce a mandatory 6-second sleep between subreddit calls to avoid HTTP 429 rate limits.
+- **24-Hour Fallback:** If a lab feed has no new posts within the last 24 hours (common for monthly releases), the top 3 most recent entries are ingested with a `recent_fallback: true` tag for background context.
+- **Hard Abort:** If all sources return zero items, the pipeline exits with code 1 rather than producing an empty email.
 
-### Synthesis Failures
-- **Retry**: The Gemini API call retries once after a 10-second delay.
-- **Validation**: The JSON response is validated against the required schema. Missing sections trigger a retry.
-- **Hard fail**: If synthesis fails after 2 attempts, the pipeline exits with code 1.
+### 2. Synthesis Failures & Schema Validation
+- **Structured JSON Output:** Synthesis uses Gemini's `response_schema` parameter to enforce `NEWSLETTER_SCHEMA` at the model token generation layer.
+- **Runtime Validation:** After parsing, `_validate_newsletter()` verifies all 5 sections and nested fields exist.
+- **Automatic Retry:** If formatting is invalid or the API encounters a transient failure, synthesis retries after a 10-second backoff delay.
+- **Token Budget Protection:** `build_payload()` caps context at 100,000 characters (~25k tokens), trimming lowest-priority sources first (social → GitHub → Reddit → lab news).
 
-### Delivery Failures
-- **Retry**: Email send retries once after a 5-second delay.
-- **Hard fail**: If delivery fails after 2 attempts, the pipeline exits with code 1.
+### 3. Autonomous Quality Self-Check
+- **Second Pass Critic:** `critique_newsletter()` uses a lightweight Gemini call (`temperature=0.1`) to score accuracy (1-10), hype ratio (1-10), and source diversity (1-10).
+- **Automatic Re-Synthesis:** If the overall score is below 7/10, the system triggers a single re-synthesis pass with the original context.
+- **Single-Source Flagging:** Stories corroborated by only one source are automatically labeled with `[Note: Unverified — single source]` in the final copy.
+- **Fail-Open Verification:** If the critic call encounters a rate limit or network error, it safely passes through the draft so delivery is never blocked by the verification layer.
 
-### GitHub Actions
-- Non-zero exit codes surface as failed workflow runs, visible in the Actions tab.
-- Workflow timeout is set to 10 minutes to prevent hanging on stuck network requests.
-- All logs are written to stdout and captured automatically by GitHub Actions.
+### 4. Delivery & Web Archiving
+- **Delivery Retries:** Email sending via Resend retries once after a 5-second backoff.
+- **Orphan Branch Isolation:** The GitHub Actions workflow pushes static editions and generated `index.html` to an isolated `gh-pages` branch, keeping the `main` branch pure code.
+- **Dynamic Fallbacks:** `render_html()` dynamically constructs the GitHub Pages archive and dashboard links using `GITHUB_REPOSITORY_OWNER`, preventing broken hash anchor links.
 
-## Design Decisions
+---
 
-### Single Gemini API Call
-The newsletter is generated in one call to `gemini-3.1-flash-lite` with a structured JSON schema. This maximizes rate budget efficiency (1 request per day out of a 500 RPD limit) and ensures editorial coherence — the model sees all sources simultaneously, enabling cross-reference and corroboration in a single pass.
+## Design Decisions & Tradeoffs
 
-### RSS Over APIs
-Most lab blogs have RSS feeds that are stable, free, and unauthenticated. Where official RSS isn't available (Anthropic, xAI), community-maintained RSSHub bridges fill the gap. This avoids API key management, rate limit complexity, and paid tier dependencies.
+### 1. Single LLM Call with Schema Enforcement vs. Multi-Agent Chain
+* **Tradeoff:** A multi-agent system (Researcher → Drafter → Critic → Formatter) consumes 4–6 API calls, risking Gemini's 15 requests-per-minute free-tier cap.
+* **Decision:** Consolidate ingestion synthesis into a single inference call with strict JSON Schema output, using roughly 10,000 tokens (~4% of daily quota). A single lightweight secondary call is reserved exclusively for the quality critic.
 
-### Reddit RSS Over JSON
-Reddit's `.json` endpoints now return 403 for unauthenticated requests. The `.rss` feeds still work without auth and provide enough data (titles, content, authors) for sentiment analysis. The tradeoff is less metadata (no upvote counts), but the post ordering in the RSS feed correlates with Reddit's ranking algorithm.
+### 2. Python HTML Rendering vs. LLM Direct HTML Generation
+* **Tradeoff:** Asking an LLM to generate raw HTML often produces malformed tags, broken styling, or markdown leaks.
+* **Decision:** The LLM generates structured data only. Python's `render_html()` deterministically formats the 600px table layout, sentiment badge colors, star ratings, and inline CSS. The presentation layout cannot break.
 
-### Token Budget Management
-The raw payload is capped at ~100,000 characters (~25k tokens). When trimming is needed, lower-priority sources (X/Twitter, then GitHub, then Reddit) are truncated first. Lab/startup news is always preserved in full since it's the primary signal source.
+### 3. Git as State Store vs. Hosted Database
+* **Tradeoff:** Provisioning and maintaining an external cloud database (Supabase, Postgres) introduces infrastructure maintenance and credential overhead.
+* **Decision:** A rolling 7-day topic window is committed directly to `data/topic_history.json` on the `main` branch by the workflow. Git acts as the zero-cost state store.
 
-### HTML Email Design
-Email clients are notoriously inconsistent with CSS rendering. The template uses inline styles, table-based layout, and system fonts — the most broadly compatible approach. No images, no external resources, no JavaScript.
+### 4. Open Developer Networks vs. Paid Twitter API
+* **Tradeoff:** The official X/Twitter API costs $100/month, and free RSS bridges are heavily blocked.
+* **Decision:** Ingest developer sentiment from Mastodon's hashtag timeline (`#AI`, `#LLM`) and Hacker News via the Algolia API. This provides over 30 authentic community perspectives per run at zero cost.
 
-### Resend Over SMTP
-Resend provides a simpler integration (single API key vs. host/port/user/password), reliable delivery, and a generous free tier (100 emails/day). The tradeoff is vendor lock-in, but swapping to SMTP would be a ~20-line change in `delivery.py`.
+### 5. Serverless Cloudflare Edge Proxy for Dashboard
+* **Tradeoff:** A static GitHub Pages frontend cannot securely store a GitHub OAuth Client Secret.
+* **Decision:** Deploy a lightweight Cloudflare Worker (`worker/index.js`) as a serverless edge proxy. The worker securely handles the token exchange, allowing users to authenticate and update `prefs.yaml` via GitHub REST API without hosting any servers.
+
+### 6. Anonymous Telemetry
+* **Tradeoff:** Traditional email tracking exposes subscriber IP addresses and email identities.
+* **Decision:** Open rates are recorded via a 1x1 tracking pixel using a SHA-256 hash of the repository actor (`hashlib.sha256(raw_actor).hexdigest()[:12]`). Fork owners can opt out completely via `allow_telemetry: false` in `prefs.yaml`.
