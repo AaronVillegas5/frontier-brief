@@ -91,6 +91,15 @@ def render_html(newsletter: dict, tracking_pixel_url: str = "", github_actor: st
     repo = newsletter["repo_of_the_day"]
     two_steps = newsletter["two_steps_ahead"]
 
+    repo_owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "aaronvillegas5").lower()
+    archive_url = newsletter.get("archive_url")
+    if not archive_url or archive_url.strip() == "#":
+        if date_str and date_str != "Unknown Date":
+            archive_url = f"https://{repo_owner}.github.io/frontier-brief/{date_str}.html"
+        else:
+            archive_url = f"https://{repo_owner}.github.io/frontier-brief/"
+    dashboard_url = f"https://{repo_owner}.github.io/frontier-brief/dashboard.html"
+
     # -----------------------------------------------------------------------
     # Frontier Watch items
     # -----------------------------------------------------------------------
@@ -336,11 +345,11 @@ def render_html(newsletter: dict, tracking_pixel_url: str = "", github_actor: st
           <tr>
             <td style="padding: 20px 30px; text-align: center; border-top: 3px solid #1a1a2e;">
               <p style="margin: 0 0 10px 0; font-size: 13px;">
-                <a href="{escape(newsletter.get('archive_url', '#'))}" style="color: #4a90d9; text-decoration: none;">
+                <a href="{escape(archive_url)}" style="color: #4a90d9; text-decoration: none;">
                   View Web Archive
                 </a>
                 &nbsp;&middot;&nbsp;
-                <a href="https://aaronvillegas5.github.io/frontier-brief/dashboard.html" style="color: #4a90d9; text-decoration: none;">
+                <a href="{escape(dashboard_url)}" style="color: #4a90d9; text-decoration: none;">
                   Manage Preferences
                 </a>
               </p>
