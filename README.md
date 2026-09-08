@@ -12,7 +12,17 @@ Runs on GitHub Actions. Costs $0.00 to operate. Ships by email every morning at 
 
 ![The Frontier Brief Architecture](docs/architecture.png)
 
-> For technical design decisions, tradeoff analyses, and failure recovery mechanisms, see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+> For in-depth technical analysis, source catalog, and failure recovery specifications, see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+---
+
+## Key Design Decisions
+
+1. **Single Structured Call vs. Multi-Agent Chain:** Rather than chaining 4–5 LLM agents that risk hitting Gemini's 15 requests-per-minute free-tier cap, synthesis is consolidated into a single call with strict JSON Schema output (~10k tokens). A lightweight secondary call is reserved exclusively for the autonomous quality critic.
+2. **Deterministic Python Rendering vs. Direct LLM HTML:** LLMs are notoriously inconsistent at generating raw HTML. Gemini generates typed JSON data only; Python's `render_html()` deterministically formats the 600px table layout, sentiment badge colors, star ratings, and inline CSS, ensuring the email template never breaks.
+3. **Git as State Store vs. Hosted Database:** To track 7-day rolling trends without infrastructure maintenance or database credentials, topic history is stored in `data/topic_history.json` and committed directly to the repo by the GitHub Action.
+4. **Open Developer Networks vs. Paid Twitter API:** To bypass X's $100/month API paywall, the pipeline ingests real developer sentiment from Mastodon's hashtag timeline (`#AI`, `#LLM`) and Hacker News via Algolia at zero cost.
+5. **Serverless Edge OAuth Proxy:** The static GitHub Pages dashboard connects through a Cloudflare Worker edge proxy (`worker/index.js`) to securely exchange OAuth tokens without exposing the GitHub App client secret.
 
 ---
 
