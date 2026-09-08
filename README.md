@@ -8,6 +8,14 @@ Runs on GitHub Actions. Costs $0.00 to operate. Ships by email every morning at 
 
 ---
 
+## Architecture Topology
+
+![The Frontier Brief Architecture](docs/architecture.png)
+
+> For technical design decisions, tradeoff analyses, and failure recovery mechanisms, see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+---
+
 ## Key Features & Stretch Goals
 
 * **13 Ingestion Feeds:** Scrapes OpenAI, DeepMind, Anthropic, Meta, Hugging Face, Mistral (HTML parser), Reddit RSS (r/MachineLearning, r/LocalLLaMA, r/singularity), Mastodon, Hacker News (Algolia API), and GitHub Trending.
