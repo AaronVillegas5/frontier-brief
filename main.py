@@ -30,7 +30,7 @@ from src.pipeline import (
     apply_critique_flags,
 )
 from src.delivery import render_html, send_email
-from src.trends import load_history, update_history, save_history, detect_heating_topics
+from src.trends import load_history, update_history, save_history, detect_heating_topics, build_topic_graph
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -171,6 +171,17 @@ def main() -> None:
         )
 
     # -----------------------------------------------------------------------
+    # Stage 1b: Graph Analysis — Entity Co-occurrence
+    # -----------------------------------------------------------------------
+    logger.info("-" * 40)
+    logger.info("STAGE 1b: Topic Co-occurrence Graph Analysis")
+    logger.info("-" * 40)
+
+    bridge_topics = build_topic_graph(lab_news, reddit_posts, github_repos)
+    if bridge_topics:
+        logger.info("Bridge topics (betweenness centrality): %s", ", ".join(bridge_topics))
+
+    # -----------------------------------------------------------------------
     # Stage 2: Synthesis
     # -----------------------------------------------------------------------
     logger.info("-" * 40)
@@ -180,7 +191,7 @@ def main() -> None:
     payload = build_payload(lab_news, reddit_posts, x_posts, github_repos)
 
     try:
-        newsletter = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None)
+        newsletter = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None, bridge_topics=bridge_topics or None)
     except Exception as exc:
         logger.critical("Newsletter synthesis failed: %s", exc)
         sys.exit(1)
@@ -198,7 +209,7 @@ def main() -> None:
         )
         time.sleep(15)  # back off before second Gemini call
         try:
-            newsletter_retry = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None)
+            newsletter_retry = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None, bridge_topics=bridge_topics or None)
             critique_retry = critique_newsletter(newsletter_retry, api_key)
             if critique_retry.get("overall", 0) >= critique.get("overall", 0):
                 logger.info("Retry improved quality score (%s → %s). Using retry.",

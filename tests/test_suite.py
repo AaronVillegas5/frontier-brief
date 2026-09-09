@@ -481,10 +481,12 @@ class TestTrendDetection(unittest.TestCase):
 
     def test_update_history_adds_today(self):
         from src.trends import update_history
-        history = {"2026-09-01": ["agents"]}
+        # Use a date within the 7-day rolling window so it won't be pruned
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        history = {recent_date: ["agents"]}
         newsletter = _stub_newsletter()
         updated = update_history(history, newsletter)
-        # Should have 2 dates now
+        # Should have 2 dates now (yesterday + today)
         self.assertEqual(len(updated), 2)
 
     def test_update_history_prunes_old_entries(self):
@@ -494,6 +496,76 @@ class TestTrendDetection(unittest.TestCase):
         newsletter = _stub_newsletter()
         updated = update_history(history, newsletter)
         self.assertNotIn(old_date, updated)
+
+
+# ---------------------------------------------------------------------------
+# trends.py — Topic Co-occurrence Graph tests
+# ---------------------------------------------------------------------------
+
+class TestTopicGraph(unittest.TestCase):
+
+    def test_normalize_entity_lowercase(self):
+        from src.trends import normalize_entity
+        self.assertEqual(normalize_entity("OpenAI"), "openai")
+
+    def test_normalize_entity_alias_mapping(self):
+        from src.trends import normalize_entity
+        self.assertEqual(normalize_entity("ChatGPT"), "openai")
+        self.assertEqual(normalize_entity("LLMs"), "llm")
+        self.assertEqual(normalize_entity("Claude"), "anthropic")
+        self.assertEqual(normalize_entity("Gemini"), "google")
+
+    def test_normalize_entity_punctuation_strip(self):
+        from src.trends import normalize_entity
+        # "A.I." has dots stripped then maps via alias
+        result = normalize_entity("A.I.")
+        self.assertEqual(result, "ai")
+
+    def test_extract_entities_from_text_basic(self):
+        from src.trends import extract_entities_from_text
+        text = "OpenAI released GPT-5 and Anthropic launched Claude for enterprise deployment"
+        entities = extract_entities_from_text(text)
+        self.assertIsInstance(entities, list)
+        self.assertGreater(len(entities), 0)
+
+    def test_extract_entities_deduplicates(self):
+        from src.trends import extract_entities_from_text
+        text = "transformers transformers transformers model model model"
+        entities = extract_entities_from_text(text)
+        # Each canonical entity should appear at most once
+        self.assertEqual(len(entities), len(set(entities)))
+
+    def test_build_topic_graph_returns_bridge_topics(self):
+        from src.trends import build_topic_graph
+        # Create articles that share entities across different contexts
+        lab_news = [
+            {"title": "OpenAI releases new model for enterprise", "summary": "Enterprise deployment of GPT models with fine-tuning support"},
+            {"title": "Anthropic safety research on transformers", "summary": "Claude safety benchmarks show improved alignment"},
+            {"title": "Google announces enterprise AI tools", "summary": "New enterprise infrastructure built on transformers"},
+        ]
+        reddit_posts = [
+            {"title": "Enterprise AI is changing everything", "content": "OpenAI and Google are both pushing enterprise tools"},
+            {"title": "Fine-tuning transformers for production", "content": "Best practices for transformer fine-tuning in enterprise"},
+        ]
+        github_repos = [
+            {"name": "enterprise-llm-toolkit", "description": "Tools for enterprise LLM deployment with transformers"},
+        ]
+        bridge = build_topic_graph(lab_news, reddit_posts, github_repos)
+        self.assertIsInstance(bridge, list)
+        # With overlapping entities, we should get some bridge topics
+        self.assertGreater(len(bridge), 0)
+
+    def test_build_topic_graph_empty_input(self):
+        from src.trends import build_topic_graph
+        bridge = build_topic_graph([], [], [])
+        self.assertEqual(bridge, [])
+
+    def test_build_topic_graph_too_small(self):
+        from src.trends import build_topic_graph
+        # A single short article won't produce enough nodes
+        lab_news = [{"title": "Short", "summary": ""}]
+        bridge = build_topic_graph(lab_news, [], [])
+        self.assertEqual(bridge, [])
 
 
 # ---------------------------------------------------------------------------

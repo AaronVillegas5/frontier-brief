@@ -12,7 +12,10 @@ import logging
 import re
 from collections import Counter
 from datetime import datetime, timezone, timedelta
+from itertools import combinations
 from pathlib import Path
+
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,9 @@ STOPWORDS = {
     "how", "what", "when", "where", "who", "why", "not", "no", "all",
     "as", "so", "if", "than", "then", "just", "like", "use", "using",
     "day", "today", "time", "year", "one", "two", "three", "first", "next",
+    # Ingestion boilerplate noise
+    "link comments", "link", "comments", "html", "work", "post", "thread",
+    "please", "projects", "startups", "read", "share",
 }
 
 
@@ -164,3 +170,185 @@ def detect_heating_topics(history: dict) -> list[str]:
         logger.debug("Trend detection: no topics at threshold (%d days)", TREND_THRESHOLD)
 
     return heating
+
+
+# ---------------------------------------------------------------------------
+# Entity Co-occurrence Graph (Graph Theory)
+# ---------------------------------------------------------------------------
+
+# Canonical alias mapping — normalizes known variations into a single node
+# to prevent graph fragmentation. Expand as needed.
+ENTITY_ALIASES = {
+    "artificial intelligence": "ai",
+    "a.i.": "ai",
+    "a.i": "ai",
+    "llms": "llm",
+    "large language model": "llm",
+    "large language models": "llm",
+    "gpt-4": "openai",
+    "gpt-4o": "openai",
+    "gpt-5": "openai",
+    "chatgpt": "openai",
+    "chat-gpt": "openai",
+    "claude": "anthropic",
+    "gemini": "google",
+    "deepmind": "google",
+    "google deepmind": "google",
+    "meta ai": "meta",
+    "llama": "meta",
+    "mistral ai": "mistral",
+    "hugging face": "huggingface",
+    "hugging-face": "huggingface",
+    "hf": "huggingface",
+    "open source": "open-source",
+    "opensource": "open-source",
+    "fine tuning": "fine-tuning",
+    "finetuning": "fine-tuning",
+    "retrieval augmented generation": "rag",
+    "retrieval-augmented generation": "rag",
+    "machine learning": "ml",
+    "deep learning": "ml",
+    "neural network": "neural-nets",
+    "neural networks": "neural-nets",
+    "github": "github",
+    "gpu": "gpus",
+    "gpus": "gpus",
+    "nvidia": "nvidia",
+    "transformer": "transformers",
+    "transformers": "transformers",
+    "agent": "agents",
+    "agents": "agents",
+    "agentic": "agents",
+}
+
+# Minimum edge weight to include in the graph — filters out noise from
+# one-off co-occurrences
+MIN_EDGE_WEIGHT = 1
+MIN_GRAPH_NODES = 3   # don't run centrality on trivially small graphs
+MAX_BRIDGE_TOPICS = 5
+
+
+def normalize_entity(text: str) -> str:
+    """
+    Normalize an entity string: lowercase, strip punctuation, and map
+    through the alias dictionary to a canonical form.
+    """
+    cleaned = re.sub(r"[^\w\s\-]", "", text.lower()).strip()
+    return ENTITY_ALIASES.get(cleaned, cleaned)
+
+
+def _extract_text_fields(item: dict) -> str:
+    """
+    Pull all meaningful text from a single payload item regardless of its
+    source type (lab article, Reddit post, or GitHub repo).
+    """
+    parts = []
+    for field in ("title", "summary", "content", "description", "text", "name"):
+        val = item.get(field, "")
+        if val:
+            parts.append(str(val))
+    return " ".join(parts)
+
+
+def extract_entities_from_text(text: str) -> list[str]:
+    """
+    Extract meaningful entity tokens from raw text, normalize them through
+    the alias map, and return a deduplicated list.
+    """
+    lower = text.lower()
+
+    # Extract individual words (4+ chars, alphabetic with hyphens)
+    words = re.findall(r"\b[a-z][a-z\-]{3,}\b", lower)
+    meaningful = [w for w in words if w not in STOPWORDS and len(w) > 3]
+
+    # Also extract bigrams for multi-word entities (e.g. "open source")
+    bigrams = []
+    word_list = re.findall(r"\b[a-z][a-z\-]{2,}\b", lower)
+    for i in range(len(word_list) - 1):
+        if word_list[i] not in STOPWORDS and word_list[i + 1] not in STOPWORDS:
+            bigrams.append(f"{word_list[i]} {word_list[i + 1]}")
+
+    # Normalize everything through the alias map
+    normalized = []
+    seen = set()
+    for token in bigrams + meaningful:
+        canon = normalize_entity(token)
+        if canon and canon not in seen and canon not in STOPWORDS and len(canon) > 2:
+            seen.add(canon)
+            normalized.append(canon)
+
+    return normalized[:50]
+
+
+def build_topic_graph(
+    lab_news: list[dict],
+    reddit_posts: list[dict],
+    github_repos: list[dict],
+) -> list[str]:
+    """
+    Build an ephemeral entity co-occurrence graph from today's ingested data.
+
+    For each article/post/repo, extract normalized entities and draw edges
+    between every pair of entities that co-occur in the same item. Then run
+    betweenness centrality to identify "bridge" topics — entities that sit
+    on the shortest paths between otherwise disconnected topic clusters.
+
+    Only processes Lab News, Reddit, and GitHub data (Twitter/X excluded
+    due to high noise).
+
+    Returns the top MAX_BRIDGE_TOPICS entities by betweenness centrality,
+    or an empty list if the graph is too small to be meaningful.
+    """
+    G = nx.Graph()
+
+    all_items = lab_news + reddit_posts + github_repos
+
+    for item in all_items:
+        text = _extract_text_fields(item)
+        entities = extract_entities_from_text(text)
+
+        # Add nodes with mention counts
+        for entity in entities:
+            if G.has_node(entity):
+                G.nodes[entity]["mentions"] += 1
+            else:
+                G.add_node(entity, mentions=1)
+
+        # Add weighted edges between co-occurring entities
+        for u, v in combinations(set(entities), 2):
+            if G.has_edge(u, v):
+                G[u][v]["weight"] += 1
+            else:
+                G.add_edge(u, v, weight=1)
+
+    # Filter out noise edges below minimum weight
+    weak_edges = [(u, v) for u, v, d in G.edges(data=True) if d["weight"] < MIN_EDGE_WEIGHT]
+    G.remove_edges_from(weak_edges)
+
+    # Remove isolated nodes (no remaining edges)
+    isolates = list(nx.isolates(G))
+    G.remove_nodes_from(isolates)
+
+    if G.number_of_nodes() < MIN_GRAPH_NODES:
+        logger.debug(
+            "Topic graph too small (%d nodes) — skipping centrality analysis",
+            G.number_of_nodes(),
+        )
+        return []
+
+    # Betweenness centrality: identifies nodes that act as bridges between
+    # distinct clusters in the graph
+    centrality = nx.betweenness_centrality(G, weight="weight")
+
+    # Sort by centrality score descending, take top N
+    ranked = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
+    bridge_topics = [topic for topic, score in ranked[:MAX_BRIDGE_TOPICS] if score > 0]
+
+    logger.info(
+        "Topic graph: %d nodes, %d edges -> bridge topics: %s",
+        G.number_of_nodes(),
+        G.number_of_edges(),
+        ", ".join(bridge_topics) if bridge_topics else "(none)",
+    )
+
+    return bridge_topics
