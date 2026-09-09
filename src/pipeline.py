@@ -206,6 +206,7 @@ def synthesize(
     prefs: dict | None = None,
     trending_topics: list[str] | None = None,
     bridge_topics: list[str] | None = None,
+    recent_stories: list[dict] | None = None,
 ) -> dict:
     """
     Send the assembled payload to Gemini 3.1 Flash-Lite and return the
@@ -220,6 +221,7 @@ def synthesize(
         bridge_topics: Optional list of high-centrality entities from the
             topic co-occurrence graph. These are entities that connect
             otherwise separate news clusters today.
+        recent_stories: Optional list of stories covered in recent newsletters.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -252,7 +254,7 @@ def synthesize(
     trend_block = ""
     if trending_topics:
         trend_block = (
-            f"\nTREND ALERT — These topics have appeared in the newsletter for "
+            f"\nTREND ALERT - These topics have appeared in the newsletter for "
             f"{3}+ consecutive days: {', '.join(trending_topics[:8])}. "
             f"If any of these appear in today's data, note in 'two_steps_ahead' that "
             f"this is an accelerating multi-day trend, not just today's news."
@@ -262,12 +264,25 @@ def synthesize(
     graph_block = ""
     if bridge_topics:
         graph_block = (
-            f"\nGRAPH ANALYSIS — Network centrality analysis of today's data identifies "
+            f"\nGRAPH ANALYSIS - Network centrality analysis of today's data identifies "
             f"these entities as bridge topics connecting otherwise separate news clusters: "
             f"{', '.join(bridge_topics)}. Use these as a thematic throughline to synthesize "
             f"the deeper narrative. Explain how these topics are linking different stories "
             f"or ecosystems together. Vary your phrasing naturally."
         )
+
+    # Build anti-repeat context block
+    anti_repeat_block = ""
+    if recent_stories:
+        recent_titles = [f'"{s.get("title", "")}"' for s in recent_stories if s.get("title")]
+        if recent_titles:
+            anti_repeat_block = (
+                f"\nRECENTLY COVERED (DO NOT REPEAT) - The following stories have been featured "
+                f"in the newsletter within the last few days:\n"
+                f"{', '.join(recent_titles)}\n"
+                f"IMPORTANT: Do not select any of these stories for 'The Big Story' or 'Frontier Watch' "
+                f"unless there is a major new counter-development or update. Prioritize fresh news."
+            )
 
     user_prompt = (
         "Below is today's raw data from AI lab announcements, Reddit discussions, "
@@ -276,6 +291,7 @@ def synthesize(
         "Corroborate claims across sources. Cut through hype. Write for a non-technical "
         "business audience. Use today's actual date for generated_date."
         f"{personalization_block}"
+        f"{anti_repeat_block}"
         f"{trend_block}"
         f"{graph_block}"
         f"\n\nRAW DATA:\n{payload}"
