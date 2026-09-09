@@ -205,6 +205,7 @@ def synthesize(
     payload: str,
     prefs: dict | None = None,
     trending_topics: list[str] | None = None,
+    bridge_topics: list[str] | None = None,
 ) -> dict:
     """
     Send the assembled payload to Gemini 3.1 Flash-Lite and return the
@@ -216,6 +217,9 @@ def synthesize(
         payload: JSON string of all ingested data.
         prefs: Optional personalization dict from prefs.yaml.
         trending_topics: Optional list of topics heating up across multiple days.
+        bridge_topics: Optional list of high-centrality entities from the
+            topic co-occurrence graph. These are entities that connect
+            otherwise separate news clusters today.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -254,6 +258,17 @@ def synthesize(
             f"this is an accelerating multi-day trend, not just today's news."
         )
 
+    # Build graph analysis context block
+    graph_block = ""
+    if bridge_topics:
+        graph_block = (
+            f"\nGRAPH ANALYSIS — Network centrality analysis of today's data identifies "
+            f"these entities as bridge topics connecting otherwise separate news clusters: "
+            f"{', '.join(bridge_topics)}. Use these as a thematic throughline to synthesize "
+            f"the deeper narrative. Explain how these topics are linking different stories "
+            f"or ecosystems together. Vary your phrasing naturally."
+        )
+
     user_prompt = (
         "Below is today's raw data from AI lab announcements, Reddit discussions, "
         "X/Twitter posts, and GitHub trending repositories. Analyze this data and "
@@ -262,8 +277,10 @@ def synthesize(
         "business audience. Use today's actual date for generated_date."
         f"{personalization_block}"
         f"{trend_block}"
+        f"{graph_block}"
         f"\n\nRAW DATA:\n{payload}"
     )
+
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
