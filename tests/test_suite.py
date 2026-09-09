@@ -568,6 +568,45 @@ class TestTopicGraph(unittest.TestCase):
         self.assertEqual(bridge, [])
 
 
+class TestRecentStories(unittest.TestCase):
+    
+    def test_update_recent_stories_adds_today(self):
+        from src.trends import update_recent_stories
+        from datetime import datetime, timezone
+        
+        newsletter = {
+            "big_story": {"headline": "Major Breakthrough", "url": "http://example.com/1"},
+            "frontier_watch": [
+                {"headline": "Minor Update", "url": "http://example.com/2"}
+            ]
+        }
+        recent_stories = {}
+        updated = update_recent_stories(recent_stories, newsletter)
+        
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        self.assertIn(today, updated)
+        self.assertEqual(len(updated[today]), 2)
+        self.assertEqual(updated[today][0]["title"], "Major Breakthrough")
+        self.assertEqual(updated[today][1]["title"], "Minor Update")
+        
+    def test_update_recent_stories_prunes_old(self):
+        from src.trends import update_recent_stories
+        from datetime import datetime, timezone, timedelta
+        
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        old_date = (datetime.now(timezone.utc) - timedelta(days=5)).strftime("%Y-%m-%d")
+        
+        recent_stories = {
+            old_date: [{"title": "Old Story", "url": ""}]
+        }
+        
+        newsletter = {"big_story": {"headline": "New Story"}}
+        updated = update_recent_stories(recent_stories, newsletter)
+        
+        self.assertIn(today, updated)
+        self.assertNotIn(old_date, updated)
+
+
 # ---------------------------------------------------------------------------
 # pipeline.py — critique flag application tests
 # ---------------------------------------------------------------------------

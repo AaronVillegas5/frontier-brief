@@ -20,7 +20,10 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 HISTORY_FILE = Path(__file__).parent.parent / "data" / "topic_history.json"
+RECENT_STORIES_FILE = Path(__file__).parent.parent / "data" / "recent_stories.json"
+
 HISTORY_DAYS = 7          # rolling window
+RECENT_STORIES_DAYS = 3   # days to remember covered stories to avoid repetition
 TREND_THRESHOLD = 3       # days a topic must appear to be flagged as "heating up"
 MAX_TOPICS_PER_DAY = 20   # cap stored topics to keep file small
 
@@ -72,6 +75,63 @@ def save_history(history: dict) -> None:
         logger.debug("Saved topic history to %s", HISTORY_FILE)
     except OSError as exc:
         logger.warning("Could not save topic history: %s", exc)
+
+
+def load_recent_stories() -> dict:
+    """
+    Load the rolling list of recently covered stories from disk.
+    Schema: {date_str: [{"title": "...", "url": "..."}, ...], ...}
+    """
+    if not RECENT_STORIES_FILE.exists():
+        return {}
+    try:
+        with open(RECENT_STORIES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_recent_stories(recent_stories: dict) -> None:
+    RECENT_STORIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(RECENT_STORIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(recent_stories, f, indent=2, ensure_ascii=False)
+    except OSError as exc:
+        logger.warning("Could not save recent stories: %s", exc)
+
+
+def update_recent_stories(recent_stories: dict, newsletter: dict) -> dict:
+    """
+    Extract stories from the generated newsletter, add to history,
+    and prune entries older than RECENT_STORIES_DAYS.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    stories = []
+
+    # Extract Big Story
+    big_story = newsletter.get("big_story", {})
+    if big_story.get("headline"):
+        stories.append({
+            "title": big_story["headline"],
+            "url": big_story.get("url", "")
+        })
+
+    # Extract Frontier Watch
+    for item in newsletter.get("frontier_watch", []):
+        if item.get("headline"):
+            stories.append({
+                "title": item["headline"],
+                "url": item.get("url", "")
+            })
+
+    recent_stories[today] = stories
+
+    # Prune old entries
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=RECENT_STORIES_DAYS)).strftime("%Y-%m-%d")
+    recent_stories = {date: items for date, items in recent_stories.items() if date >= cutoff}
+
+    return recent_stories
+
 
 
 def extract_topics(newsletter: dict) -> list[str]:

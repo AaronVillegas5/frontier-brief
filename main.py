@@ -30,7 +30,10 @@ from src.pipeline import (
     apply_critique_flags,
 )
 from src.delivery import render_html, send_email
-from src.trends import load_history, update_history, save_history, detect_heating_topics, build_topic_graph
+from src.trends import (
+    load_history, update_history, save_history, detect_heating_topics, build_topic_graph,
+    load_recent_stories, update_recent_stories, save_recent_stories
+)
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -138,6 +141,13 @@ def main() -> None:
     if trending_topics:
         logger.info("Trending topics (3+ days): %s", ", ".join(trending_topics[:5]))
 
+    recent_stories_dict = load_recent_stories()
+    # Flatten the dict of lists into a single list of dicts {"title": "...", "url": "..."}
+    recent_stories = []
+    for stories in recent_stories_dict.values():
+        recent_stories.extend(stories)
+
+
     # -----------------------------------------------------------------------
     # Stage 1: Ingestion
     # -----------------------------------------------------------------------
@@ -191,7 +201,13 @@ def main() -> None:
     payload = build_payload(lab_news, reddit_posts, x_posts, github_repos)
 
     try:
-        newsletter = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None, bridge_topics=bridge_topics or None)
+        newsletter = synthesize(
+            payload, 
+            prefs=prefs, 
+            trending_topics=trending_topics or None, 
+            bridge_topics=bridge_topics or None,
+            recent_stories=recent_stories or None
+        )
     except Exception as exc:
         logger.critical("Newsletter synthesis failed: %s", exc)
         sys.exit(1)
@@ -209,7 +225,13 @@ def main() -> None:
         )
         time.sleep(15)  # back off before second Gemini call
         try:
-            newsletter_retry = synthesize(payload, prefs=prefs, trending_topics=trending_topics or None, bridge_topics=bridge_topics or None)
+            newsletter_retry = synthesize(
+                payload, 
+                prefs=prefs, 
+                trending_topics=trending_topics or None, 
+                bridge_topics=bridge_topics or None,
+                recent_stories=recent_stories or None
+            )
             critique_retry = critique_newsletter(newsletter_retry, api_key)
             if critique_retry.get("overall", 0) >= critique.get("overall", 0):
                 logger.info("Retry improved quality score (%s → %s). Using retry.",
@@ -266,8 +288,16 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # Stage 4: Post-delivery — update trend history
     # -----------------------------------------------------------------------
-    topic_history = update_history(topic_history, newsletter)
-    save_history(topic_history)
+    is_scheduled_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    if is_scheduled_run:
+        topic_history = update_history(topic_history, newsletter)
+        save_history(topic_history)
+        
+        recent_stories_dict = update_recent_stories(recent_stories_dict, newsletter)
+        save_recent_stories(recent_stories_dict)
+        logger.info("Updated history logs for scheduled run.")
+    else:
+        logger.info("Skipping history save (non-scheduled or local test run).")
 
     # -----------------------------------------------------------------------
     # Done
